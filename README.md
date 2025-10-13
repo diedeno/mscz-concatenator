@@ -1,7 +1,13 @@
+[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.en.html)
+
 # mscz-concatenator
 
-A simple graphical front-end for [**ms-concatenate.py**](https://github.com/Zen-Master-SoSo/mscore/blob/master/scripts/ms_concatenate.py), part of the [Zen-Master-SoSo/mscore](https://github.com/Zen-Master-SoSo/mscore) library. This tool lets you **concatenate multiple MuseScore `.mscz` files** into a single new file.
-Announced on https://linuxmusicians.com/viewtopic.php?t=28728
+A simple graphical front-end for [**ms-concatenate.py**](https://github.com/Zen-Master-SoSo/mscore/blob/master/scripts/ms_concatenate.py), part of the [Zen-Master-SoSo/mscore](https://github.com/Zen-Master-SoSo/mscore) library, announced on https://linuxmusicians.com/viewtopic.php?t=28728
+
+This tool lets you **concatenate multiple MuseScore `.mscz` files** into a single new file.
+
+
+![screenshot](screenshot.png)
 
 ### Features 
 - Combine multiple `.mscz` MuseScore files into one.
