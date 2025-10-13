@@ -12,8 +12,7 @@ This tool lets you **concatenate multiple MuseScore `.mscz` files** into a singl
 ### Features 
 - Combine multiple `.mscz` MuseScore files into one.
 - Reorder files before concatenation.
-- Available as: - Windows standalone `.exe`
-                - Linux executable`
+- Available as: - Windows standalone `.exe` and Linux executable
 ---
 
 ## Installation
@@ -39,7 +38,7 @@ Install Python 3.8+ and dependencies:
 ```bash
 pip install mscore3
 ````
-(The mscore library is available here: https://github.com/Zen-Master-SoSo/mscore)
+(The mscore source is available here: https://github.com/Zen-Master-SoSo/mscore)
 
 Run the GUI:
 ```bash
