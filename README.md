@@ -33,12 +33,7 @@ Then double-click to launch. No installation required.
 
 ### Option 2 — Run from source (Linux / Windows)
 
--Download ms_concatenator.py and mscz-concatentor.py and save in the same directory.
-Install Python 3.8+ and dependencies:
-```bash
-pip install mscore3
-````
-(The mscore source is available here: https://github.com/Zen-Master-SoSo/mscore)
+Clone this repo. (keep everything in same folder)
 
 Run the GUI:
 ```bash
