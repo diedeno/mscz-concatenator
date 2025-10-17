@@ -1,6 +1,7 @@
 #  mscore/scripts/ms_concatenate.py
 #
 #  Copyright 2025 Leon Dionne <ldionne@dridesign.sh.cn>
+#  Modified 2025 Diego Denolf <graffesmusic@gmail.com> 
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -28,7 +29,8 @@ more pleasant.
 
 Note that all sources MUST have the same part / instrument structure.
 """
-import logging, sys
+import logging
+import sys
 import argparse
 from os import linesep
 from shutil import copy2 as copy
@@ -38,12 +40,14 @@ from mscore import Score, VoiceName
 from mscore.fuzzy import FuzzyCandidate, FuzzyName
 
 
-def concatenate(source_paths, target_path, verbose=False):
+def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=True, verbose=False):
     """
     Concatenate MuseScore files into one.
 
     :param source_paths: list of paths to source score files (at least 2)
     :param target_path: path to the output score file
+    :param copy_frames: whether to copy frames from subsequent scores
+    :param copy_title_frames: whether to copy title frames from subsequent scores
     :param verbose: whether to show debug logging
     """
     if len(source_paths) < 2:
@@ -63,18 +67,20 @@ def concatenate(source_paths, target_path, verbose=False):
     if target_path in source_paths:
         raise ValueError("Sources and Target must be different paths")
 
-    # Print info
-    print("Concatenating:")
-    print(linesep.join(source_paths))
-    print("Target:")
-    print(target_path)
+    # Print info  -- remove for exe 
+    # print("Concatenating:")
+    # print(linesep.join(source_paths))
+    # print("Target:")
+    # print(target_path)
+    # print(f"Copy frames: {copy_frames}")
+    # print(f"Copy title frames: {copy_title_frames}")
 
     # Sanity checks
     for a, b in combinations(source_paths, 2):
         if a == b:
             raise ValueError("More than one Source are the same file")
 
-    # Copy first file to target
+    # Copy first file to target (includes all frames and measures from first score)
     copy(source_paths[0], target_path)
     target = Score(target_path)
 
@@ -93,10 +99,14 @@ def concatenate(source_paths, target_path, verbose=False):
         format="[%(filename)24s:%(lineno)3d] %(message)s"
     )
 
-    # Concatenate
+    # Concatenate using the unified method
     for source in sources:
-        target.concatenate_measures(source)
-
+        target.concatenate_score(
+            source, 
+            copy_frames=copy_frames,
+            copy_title_frames=copy_title_frames
+        )
+        
     target.save()
 
 
@@ -106,20 +116,26 @@ def main():
                    help="MuseScore3 score file to copy measures from")
     p.add_argument("Target", type=str, nargs=1,
                    help="MuseScore3 score file to copy concatenated measures to")
+    p.add_argument("--no-copy-frames", action="store_true",
+                   help="Do not copy frames from subsequent scores (only measures)")
+    p.add_argument("--no-copy-title-frames", action="store_true",
+                   help="Do not copy title frames from subsequent scores")
     p.add_argument("--verbose", "-v", action="store_true",
                    help="Show more detailed debug information")
     p.epilog = __doc__
     options = p.parse_args()
 
     try:
-        concatenate(options.Sources, options.Target[0], options.verbose)
+        concatenate(
+            options.Sources, 
+            options.Target[0], 
+            copy_frames=not options.no_copy_frames,
+            copy_title_frames=not options.no_copy_title_frames,
+            verbose=options.verbose
+        )
     except Exception as e:
         p.error(str(e))
 
 
 if __name__ == "__main__":
     main()
-
-#  end mscore/scripts/ms_concatenate.py
-
-

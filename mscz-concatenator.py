@@ -3,6 +3,7 @@
 GUI wrapper for ms-concatenate.py
 ---------------------------------
 Provides a simple Tkinter interface to concatenate MuseScore files.
+2025 Diego Denolf <graffesmusic@gmail.com>
 """
 
 import tkinter as tk
@@ -14,7 +15,7 @@ import ms_concatenate  # must be in the same folder or installed as a module
 class ConcatenateGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("MuseScore Concatenator")
+        self.root.title("MuseScore Concatenator v1.1")
         self.files = []
 
         # --- Input files listbox with scrollbars ---
@@ -43,6 +44,29 @@ class ConcatenateGUI:
         tk.Button(btn_frame, text="Move Up", command=self.move_up).grid(row=0, column=3, padx=5)
         tk.Button(btn_frame, text="Move Down", command=self.move_down).grid(row=0, column=4, padx=5)
 
+        # --- Frame copying options ---
+        options_frame = tk.LabelFrame(root, text="Frame Copying Options for Subsequent Scores", padx=10, pady=5)
+        options_frame.pack(padx=10, pady=5, fill="x")
+
+        # Copy frames option
+        self.copy_frames_var = tk.BooleanVar(value=True)
+        self.copy_frames_cb = tk.Checkbutton(
+            options_frame, 
+            text="Copy frames from subsequent scores", 
+            variable=self.copy_frames_var,
+            command=self.toggle_title_frames_option
+        )
+        self.copy_frames_cb.grid(row=0, column=0, sticky="w", pady=2)
+
+        # Copy title frames option (only enabled when copy_frames is True)
+        self.copy_title_frames_var = tk.BooleanVar(value=True)
+        self.copy_title_frames_cb = tk.Checkbutton(
+            options_frame, 
+            text="Copy title frames from subsequent scores", 
+            variable=self.copy_title_frames_var
+        )
+        self.copy_title_frames_cb.grid(row=1, column=0, sticky="w", padx=20, pady=2)
+
         # --- Output file selector ---
         out_frame = tk.Frame(root)
         out_frame.pack(pady=5, fill="x")
@@ -64,6 +88,14 @@ class ConcatenateGUI:
         self.status = tk.StringVar()
         self.status.set("Ready")
         tk.Label(root, textvariable=self.status, fg="blue").pack(pady=5)
+
+    def toggle_title_frames_option(self):
+        """Enable/disable the title frames checkbox based on copy_frames state"""
+        if self.copy_frames_var.get():
+            self.copy_title_frames_cb.config(state="normal")
+        else:
+            self.copy_title_frames_cb.config(state="disabled")
+            self.copy_title_frames_var.set(False)  # Auto-uncheck when frames are disabled
 
     # -------------------------------------------------------------------------
     # File handling
@@ -139,7 +171,18 @@ class ConcatenateGUI:
             self.status.set("Processing...")
             self.root.update_idletasks()
 
-            ms_concatenate.concatenate(self.files, output, verbose=False)
+            # Get the frame copying options
+            copy_frames = self.copy_frames_var.get()
+            copy_title_frames = self.copy_title_frames_var.get() if copy_frames else False
+
+            # Call the concatenate function with the correct parameters
+            ms_concatenate.concatenate(
+                self.files, 
+                output, 
+                copy_frames=copy_frames,
+                copy_title_frames=copy_title_frames,
+                verbose=False
+            )
 
             self.status.set("Done!")
             messagebox.showinfo("Success", f"Files concatenated into:\n{output}")
@@ -158,13 +201,13 @@ class ConcatenateGUI:
         about.resizable(False, False)
 
         tk.Label(about, text="MuseScore Concatenator", font=("Arial", 14, "bold")).pack(pady=10)
-        tk.Label(about, text="Version 1.0", font=("Arial", 11)).pack(pady=2)
+        tk.Label(about, text="Version 1.1", font=("Arial", 11)).pack(pady=2)
         tk.Label(about, text="Original script and library © 2025 Leon Dionne", font=("Arial", 10)).pack(pady=2)
-        tk.Label(about, text="GUI wrapper © 2025 Diego Denolf", font=("Arial", 10)).pack(pady=2)
+        tk.Label(about, text="Modifications and GUI wrapper © 2025 Diego Denolf", font=("Arial", 10)).pack(pady=2)
 
         msg = (
-            "This app is a graphical frontend for the ms-concatenate.py script from:\n"
-            "https://github.com/Zen-Master-SoSo/mscore\n"
+            "Original code from https://github.com/Zen-Master-SoSo/mscore\n"
+            "Modifications: https://github.com/diedeno/mscz-concatenator\n"
             "Licensed under the GNU GPL v3."
         )
         tk.Label(about, text=msg, wraplength=360, justify="left").pack(padx=15, pady=10)
@@ -178,5 +221,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = ConcatenateGUI(root)
     root.mainloop()
-
-
