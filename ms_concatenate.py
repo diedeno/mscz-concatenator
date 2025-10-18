@@ -40,7 +40,7 @@ from mscore import Score, VoiceName
 from mscore.fuzzy import FuzzyCandidate, FuzzyName
 
 
-def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=True, verbose=False):
+def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=True, copy_system_locks=True, verbose=False, progress_callback=None):
     """
     Concatenate MuseScore files into one.
 
@@ -49,6 +49,7 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
     :param copy_frames: whether to copy frames from subsequent scores
     :param copy_title_frames: whether to copy title frames from subsequent scores
     :param verbose: whether to show debug logging
+    :param progress_callback: callback function for progress updates (current, total)
     """
     if len(source_paths) < 2:
         raise ValueError("You must provide at least two sources.")
@@ -79,6 +80,12 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
     for a, b in combinations(source_paths, 2):
         if a == b:
             raise ValueError("More than one Source are the same file")
+    # Make sure duplicate_warnings is defined
+    duplicate_warnings = []
+    
+    # Update progress for base file (file 1)
+    if progress_callback:
+        progress_callback(1, len(source_paths))
 
     # Copy first file to target (includes all frames and measures from first score)
     copy(source_paths[0], target_path)
@@ -99,16 +106,32 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
         format="[%(filename)24s:%(lineno)3d] %(message)s"
     )
 
-    # Concatenate using the unified method
-    for source in sources:
-        target.concatenate_score(
-            source, 
-            copy_frames=copy_frames,
-            copy_title_frames=copy_title_frames
+    # Concatenate using the unified method with progress updates
+    for i, source in enumerate(sources):
+        had_duplicates = target.concatenate_score(
+        source, 
+        copy_frames=copy_frames,
+        copy_title_frames=copy_title_frames,
+        copy_system_locks=copy_system_locks
         )
         
-    target.save()
+        if had_duplicates:
+            duplicate_warnings.append(source.basename)
+        
+        # Update progress for each additional file
+        if progress_callback:
+            progress_callback(i + 2, len(source_paths))
 
+    # Show duplicate warnings
+    if duplicate_warnings and verbose:
+        warning_msg = f"Duplicate eids found in: {', '.join(duplicate_warnings)}. System locks from these files were skipped."
+        print(f"Warning: {warning_msg}")
+        print("Target file eids are now unique - you can add system locks manually if needed")
+
+    target.save()
+    
+    # Return both values
+    return True, duplicate_warnings
 
 def main():
     p = argparse.ArgumentParser()
@@ -120,19 +143,26 @@ def main():
                    help="Do not copy frames from subsequent scores (only measures)")
     p.add_argument("--no-copy-title-frames", action="store_true",
                    help="Do not copy title frames from subsequent scores")
+    p.add_argument("--no-copy-system-locks", action="store_true",
+                   help="Do not copy system locks from subsequent scores")
     p.add_argument("--verbose", "-v", action="store_true",
                    help="Show more detailed debug information")
     p.epilog = __doc__
     options = p.parse_args()
 
     try:
-        concatenate(
+        success, duplicate_warnings = concatenate(
             options.Sources, 
             options.Target[0], 
             copy_frames=not options.no_copy_frames,
             copy_title_frames=not options.no_copy_title_frames,
+            copy_system_locks=not options.no_copy_system_locks,
             verbose=options.verbose
         )
+        
+        if duplicate_warnings and options.verbose:
+            print(f"Files with duplicate eids: {', '.join(duplicate_warnings)}")
+            
     except Exception as e:
         p.error(str(e))
 

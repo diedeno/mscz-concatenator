@@ -15,7 +15,7 @@ import ms_concatenate  # must be in the same folder or installed as a module
 class ConcatenateGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("MuseScore Concatenator v1.1")
+        self.root.title("MuseScore Concatenator v1.2")
         self.files = []
 
         # --- Input files listbox with scrollbars ---
@@ -44,8 +44,8 @@ class ConcatenateGUI:
         tk.Button(btn_frame, text="Move Up", command=self.move_up).grid(row=0, column=3, padx=5)
         tk.Button(btn_frame, text="Move Down", command=self.move_down).grid(row=0, column=4, padx=5)
 
-        # --- Frame copying options ---
-        options_frame = tk.LabelFrame(root, text="Frame Copying Options for Subsequent Scores", padx=10, pady=5)
+        # --- Content copying options ---
+        options_frame = tk.LabelFrame(root, text="Content Copying Options for Subsequent Scores", padx=10, pady=5)
         options_frame.pack(padx=10, pady=5, fill="x")
 
         # Copy frames option
@@ -66,6 +66,25 @@ class ConcatenateGUI:
             variable=self.copy_title_frames_var
         )
         self.copy_title_frames_cb.grid(row=1, column=0, sticky="w", padx=20, pady=2)
+
+        # Copy system locks option
+        self.copy_system_locks_var = tk.BooleanVar(value=True)
+        self.copy_system_locks_cb = tk.Checkbutton(
+            options_frame, 
+            text="Copy system locks from subsequent scores", 
+            variable=self.copy_system_locks_var
+        )
+        self.copy_system_locks_cb.grid(row=2, column=0, sticky="w", pady=2)
+
+        # Update the toggle method name and logic
+        def toggle_frame_options(self):
+            """Enable/disable the frame options based on copy_frames state"""
+            if self.copy_frames_var.get():
+                self.copy_title_frames_cb.config(state="normal")
+            else:
+                self.copy_title_frames_cb.config(state="disabled")
+                self.copy_title_frames_var.set(False)  # Auto-uncheck when frames are disabled
+                self.copy_title_frames_cb.grid(row=1, column=0, sticky="w", padx=20, pady=2)
 
         # --- Output file selector ---
         out_frame = tk.Frame(root)
@@ -88,7 +107,12 @@ class ConcatenateGUI:
         self.status = tk.StringVar()
         self.status.set("Ready")
         tk.Label(root, textvariable=self.status, fg="blue").pack(pady=5)
-
+        
+        # --- Progress Bar ---
+        self.progress = ttk.Progressbar(root, mode='determinate')
+        self.progress.pack(pady=5, fill="x", padx=10)
+        self.progress.pack_forget()  # Hide initially
+        
     def toggle_title_frames_option(self):
         """Enable/disable the title frames checkbox based on copy_frames state"""
         if self.copy_frames_var.get():
@@ -168,28 +192,49 @@ class ConcatenateGUI:
             return
 
         try:
-            self.status.set("Processing...")
-            self.root.update_idletasks()
+            # Show and reset progress bar
+            self.progress.pack(pady=5, fill="x", padx=10)
+            self.progress['maximum'] = len(self.files)  # Total files to process
+            self.progress['value'] = 0
+            
+            self.status.set("Starting...")
+            self.root.update_idletasks()  # Force GUI update
 
             # Get the frame copying options
             copy_frames = self.copy_frames_var.get()
             copy_title_frames = self.copy_title_frames_var.get() if copy_frames else False
+            copy_system_locks = self.copy_system_locks_var.get()
 
-            # Call the concatenate function with the correct parameters
-            ms_concatenate.concatenate(
+            # Call the concatenate function with progress updates
+            success, duplicate_warnings = ms_concatenate.concatenate(
                 self.files, 
                 output, 
                 copy_frames=copy_frames,
                 copy_title_frames=copy_title_frames,
-                verbose=False
+                copy_system_locks=copy_system_locks,
+                verbose=False,
+                progress_callback=self.update_progress
             )
-
+      
+            # Show duplicate warnings if any
+            if duplicate_warnings:
+                warning_msg = f"Duplicate eids detected in: {', '.join(duplicate_warnings)}\n\nSystem locks from these files were skipped.\n\nTarget file has unique eids - you can add system locks manually if needed."
+                messagebox.showwarning("Duplicate EIDs", warning_msg)
+     
             self.status.set("Done!")
+            self.progress.pack_forget()  # Hide progress bar when done
             messagebox.showinfo("Success", f"Files concatenated into:\n{output}")
         except Exception as e:
             traceback.print_exc()
             messagebox.showerror("Error", f"An error occurred:\n{e}")
             self.status.set("Error")
+            self.progress.pack_forget()  # Hide progress bar on error
+
+    def update_progress(self, current, total):
+        """Callback function to update progress bar"""
+        self.progress['value'] = current
+        self.status.set(f"Processing file {current}/{total}")
+        self.root.update_idletasks()  # Keep GUI responsive
 
     # -------------------------------------------------------------------------
     # About dialog
@@ -201,13 +246,14 @@ class ConcatenateGUI:
         about.resizable(False, False)
 
         tk.Label(about, text="MuseScore Concatenator", font=("Arial", 14, "bold")).pack(pady=10)
-        tk.Label(about, text="Version 1.1", font=("Arial", 11)).pack(pady=2)
-        tk.Label(about, text="Original script and library © 2025 Leon Dionne", font=("Arial", 10)).pack(pady=2)
-        tk.Label(about, text="Modifications and GUI wrapper © 2025 Diego Denolf", font=("Arial", 10)).pack(pady=2)
+        tk.Label(about, text="Version 1.2", font=("Arial", 11)).pack(pady=2)
+        tk.Label(about, text="© 2025 Diego Denolf", font=("Arial", 10)).pack(pady=2)
+        tk.Label(about, text="Based on the mscore script and library © 2025 Leon Dionne", font=("Arial", 10)).pack(pady=2)
 
         msg = (
+            "Source: https://github.com/diedeno/mscz-concatenator\n" 
             "Original code from https://github.com/Zen-Master-SoSo/mscore\n"
-            "Modifications: https://github.com/diedeno/mscz-concatenator\n"
+            
             "Licensed under the GNU GPL v3."
         )
         tk.Label(about, text=msg, wraplength=360, justify="left").pack(padx=15, pady=10)

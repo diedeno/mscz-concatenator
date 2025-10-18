@@ -265,11 +265,50 @@ class Score(SmartTree):
 
 	def instrument_names(self):
 		return [ p.instrument().name for p in self.parts() ]
+        
+	def find_duplicate_eids(self, source_score):
+		"""Find measure eids that exist in both this score and the source score"""
+		target_measure_eids = set()
+		source_measure_eids = set()
+		
+		# Collect eids from target score (from <eid> elements)
+		for eid_elem in self.tree.getroot().findall(".//eid"):
+			eid = eid_elem.text
+			if eid:
+				target_measure_eids.add(eid)
+		
+		# Collect eids from source score (from <eid> elements)  
+		for eid_elem in source_score.tree.getroot().findall(".//eid"):
+			eid = eid_elem.text
+			if eid:
+				source_measure_eids.add(eid)
+		
+		return target_measure_eids.intersection(source_measure_eids)
 
-	def concatenate_score(self, source_score, copy_frames=True, copy_title_frames=True):
+	def rename_duplicate_eids(self, source_score, duplicate_eids):
+		"""Rename duplicate measure eids in the source score to ensure uniqueness"""
+		import uuid
+		import base64
+		
+		def generate_new_eid():
+			"""Generate a new unique eid similar to MuseScore's format"""
+			return base64.urlsafe_b64encode(uuid.uuid4().bytes).decode('utf-8').rstrip('=')
+		
+		# Create mapping from old to new eids
+		eid_mapping = {}
+		for old_eid in duplicate_eids:
+			eid_mapping[old_eid] = generate_new_eid()
+		
+		# Update eids in source score (update <eid> element text)
+		for eid_elem in source_score.tree.getroot().findall(".//eid"):
+			old_eid = eid_elem.text
+			if old_eid in eid_mapping:
+				eid_elem.text = eid_mapping[old_eid]
+                
+                
+	def concatenate_score(self, source_score, copy_frames=True, copy_title_frames=True, copy_system_locks=True):
 		"""
 		Unified method to concatenate another Score into this one.
-		Handles all cases: measures only, frames+measures with/without titles.
 		"""
 		from copy import deepcopy
 		FRAME_TAGS = ("VBox", "HBox", "TBox", "FBox")
@@ -279,14 +318,31 @@ class Score(SmartTree):
 		src_score = source_score.tree.getroot().find(".//Score")
 
 		if tgt_score is None or src_score is None:
-			return
+			return False
+
+		# Check for eid conflicts before processing
+		duplicate_eids = self.find_duplicate_eids(source_score)
+		had_duplicates = bool(duplicate_eids)
+		#print(f"DEBUG: Duplicate eids found: {duplicate_eids}")
+		
+		# Rename duplicate eids to ensure target file has unique eids
+		if duplicate_eids:
+			#print(f"DEBUG: Renaming {len(duplicate_eids)} duplicate eids")
+			self.rename_duplicate_eids(source_score, duplicate_eids)
+			# Skip system locks since references would be broken
+			copy_system_locks_for_this_file = False
+		else:
+			copy_system_locks_for_this_file = copy_system_locks
 
 		# Get all staffs from both scores
 		tgt_staffs = tgt_score.findall(".//Staff")
 		src_staffs = src_score.findall(".//Staff")
 		
+		#print(f"DEBUG: Target staffs: {len(tgt_staffs)}, Source staffs: {len(src_staffs)}")
+		
 		if len(tgt_staffs) != len(src_staffs):
-			return
+			#print("DEBUG: Staff count mismatch, returning")
+			return had_duplicates
 		
 		# Process each staff individually
 		for tgt_staff, src_staff in zip(tgt_staffs, src_staffs):
@@ -320,10 +376,24 @@ class Score(SmartTree):
 							continue
 					
 					first_frame = False
-					
-					# Copy the frame
 					elem_copy = deepcopy(elem)
 					tgt_staff.append(elem_copy)
+		
+		# Copy SystemLocks only if no duplicates were found
+		if copy_system_locks_for_this_file:
+			src_system_locks = src_score.find("SystemLocks")
+			if src_system_locks is not None:
+				tgt_system_locks = tgt_score.find("SystemLocks")
+				if tgt_system_locks is None:
+					tgt_system_locks = deepcopy(src_system_locks)
+					tgt_score.append(tgt_system_locks)
+				else:
+					for system_lock in src_system_locks:
+						system_lock_copy = deepcopy(system_lock)
+						tgt_system_locks.append(system_lock_copy)
+		
+		#print(f"DEBUG: Completed concatenate_score for {source_score.basename}")
+		return had_duplicates  # Return whether duplicates were found and handled
 
 	def concatenate_measures(self, source_score):
 		"""Original method - copy only measures"""
