@@ -2,16 +2,19 @@
 
 # mscz-concatenator
 
-A simple graphical front-end for [**ms-concatenate.py**](https://github.com/Zen-Master-SoSo/mscore/blob/master/scripts/ms_concatenate.py), part of the [Zen-Master-SoSo/mscore](https://github.com/Zen-Master-SoSo/mscore) library, announced on https://linuxmusicians.com/viewtopic.php?t=28728
+This application lets you **concatenate multiple MuseScore `.mscz` files** into a single new file.
 
-This tool lets you **concatenate multiple MuseScore `.mscz` files** into a single new file. Developed for MuseScore 3x but it should also work with MuseScore 4x files.
+Build upon [**ms-concatenate.py**](https://github.com/Zen-Master-SoSo/mscore/blob/master/scripts/ms_concatenate.py), part of the [Zen-Master-SoSo/mscore](https://github.com/Zen-Master-SoSo/mscore) library, announced on https://linuxmusicians.com/viewtopic.php?t=28728
 
+---
 
 ![screenshot](screenshot.png)
 
 ### Features 
 - Combine multiple `.mscz` MuseScore files into one.
 - Reorder files before concatenation.
+- choose to copy frames, title frames and/or systemlocks
+- eid conflict resolution
 - Available as: - Windows standalone `.exe` and Linux executable
 ---
 
