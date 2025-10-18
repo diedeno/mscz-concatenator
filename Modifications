@@ -1,6 +1,9 @@
 mscz-concatenator history
 
-
-v1.1. 20251017 modified to make frame copy possible
-v1.0  20251013 original version
+v1.2  20251018: added: -progress bar and live status update
+                       -option to copy systemlocks (default on)
+                       -eid conflict resolution
+                       -user warning when system locks are skipped due to eid conflicts
+v1.1. 20251017: modified to make frame copy possible
+v1.0  20251013: original version
 
