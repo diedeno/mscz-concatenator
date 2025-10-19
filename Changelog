@@ -1,5 +1,10 @@
-mscz-concatenator history
+mscz-concatenator changelog
 
+
+v1.3  20251019: -Multi-select file removal in the GUI
+                -eid handling with automatic renaming and system lock reference updates
+                -Embedded picture copying
+                -Better error handling (Fixed TypeError)
 v1.2  20251018: added: -progress bar and live status update
                        -option to copy systemlocks (default on)
                        -eid conflict resolution
