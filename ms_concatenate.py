@@ -32,6 +32,7 @@ Note that all sources MUST have the same part / instrument structure.
 import logging
 import sys
 import argparse
+import os
 from os import linesep
 from shutil import copy2 as copy
 from itertools import combinations
@@ -40,7 +41,7 @@ from mscore import Score, VoiceName
 from mscore.fuzzy import FuzzyCandidate, FuzzyName
 
 
-def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=True, copy_system_locks=True, verbose=False, progress_callback=None):
+def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=True, copy_system_locks=True, copy_pictures=False, verbose=False, progress_callback=None):
     """
     Concatenate MuseScore files into one.
 
@@ -94,41 +95,84 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
     # Load rest
     sources = [Score(src) for src in source_paths[1:]]
     for src in sources:
-        if sorted(src.part_names()) != sorted(target.part_names()):
+        # Get and clean part names FIRST, before any sorting
+        src_parts = src.part_names()
+        target_parts = target.part_names()
+        
+        # Clean both part lists (remove None and empty values)
+        src_parts_clean = [part for part in src_parts if part is not None and part != ""]
+        target_parts_clean = [part for part in target_parts if part is not None and part != ""]
+        
+        # Check for text-only files first
+        if not src_parts_clean:
             raise ValueError(
-                f'Source "{src.basename}" does not have the same part names as Source "{target.basename}"\n'
-                "All sources must have the same part names"
+                f'File "{src.basename}" contains no musical parts (only text frames).\n'
+                "This file cannot be concatenated with musical scores.\n"
+                "Please remove it from the file list."
             )
+        
+        # Also check if target has no parts (shouldn't happen, but just in case)
+        if not target_parts_clean:
+            raise ValueError(
+                f'The first file "{os.path.basename(source_paths[0])}" contains no musical parts.\n'
+                "Please select a different file as the first file."
+            )
+        
+        # Now sort and compare
+        if sorted(src_parts_clean) != sorted(target_parts_clean):
+            first_filename = os.path.basename(source_paths[0])
+            
+            raise ValueError(
+                f'File "{src.basename}" does not have the same part names as the first file "{first_filename}"\n'
+                #f'First file parts: {sorted(target_parts_clean)}\n'
+                #f'This file parts: {sorted(src_parts_clean)}\n'
+                "All files must have the same instrument parts to be concatenated."
+            )
+            
+       # Logging
+            logging.basicConfig(
+                level=logging.DEBUG if verbose else logging.ERROR,
+                format="[%(filename)24s:%(lineno)3d] %(message)s"
+            )            
 
-    # Logging
-    logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.ERROR,
-        format="[%(filename)24s:%(lineno)3d] %(message)s"
-    )
-
+         
     # Concatenate using the unified method with progress updates
     for i, source in enumerate(sources):
-        had_duplicates = target.concatenate_score(
-        source, 
-        copy_frames=copy_frames,
-        copy_title_frames=copy_title_frames,
-        copy_system_locks=copy_system_locks
-        )
-        
-        if had_duplicates:
-            duplicate_warnings.append(source.basename)
-        
-        # Update progress for each additional file
-        if progress_callback:
-            progress_callback(i + 2, len(source_paths))
+            had_duplicates = target.concatenate_score(
+                source, 
+                copy_frames=copy_frames,
+                copy_title_frames=copy_title_frames,
+                copy_system_locks=copy_system_locks,
+                copy_pictures=copy_pictures,
+                target_path=target_path
+            )
+            
+            if had_duplicates:
+                duplicate_warnings.append(source.basename)
+            
+            # Update progress
+            if progress_callback:
+                progress_callback(i + 2, len(source_paths))
 
     # Show duplicate warnings
     if duplicate_warnings and verbose:
-        warning_msg = f"Duplicate eids found in: {', '.join(duplicate_warnings)}. System locks from these files were skipped."
-        print(f"Warning: {warning_msg}")
-        print("Target file eids are now unique - you can add system locks manually if needed")
+        print(f"Note: Duplicate eids automatically resolved in: {', '.join(duplicate_warnings)}")
 
     target.save()
+    
+    # copy pictures (after the file exists)
+    total_pictures_copied = 0  #  initializing
+    
+    if copy_pictures:
+        total_pictures_copied = 0
+        for source in sources:
+            pictures_copied = target.copy_pictures_to_target(source, target_path)
+            total_pictures_copied += pictures_copied
+            if pictures_copied > 0 and verbose:
+                print(f"Copied {pictures_copied} pictures from {source.basename}")
+        
+    if total_pictures_copied > 0 and verbose:
+            print(f"Total pictures copied: {total_pictures_copied}")
     
     # Return both values
     return True, duplicate_warnings
@@ -143,6 +187,8 @@ def main():
                    help="Do not copy frames from subsequent scores (only measures)")
     p.add_argument("--no-copy-title-frames", action="store_true",
                    help="Do not copy title frames from subsequent scores")
+    p.add_argument("--no-copy-pictures", action="store_true",
+               help="Do not copy embedded pictures from subsequent scores")               
     p.add_argument("--no-copy-system-locks", action="store_true",
                    help="Do not copy system locks from subsequent scores")
     p.add_argument("--verbose", "-v", action="store_true",
@@ -155,6 +201,7 @@ def main():
             options.Sources, 
             options.Target[0], 
             copy_frames=not options.no_copy_frames,
+            copy_pictures=not options.no_copy_pictures,
             copy_title_frames=not options.no_copy_title_frames,
             copy_system_locks=not options.no_copy_system_locks,
             verbose=options.verbose

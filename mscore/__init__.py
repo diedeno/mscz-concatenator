@@ -286,7 +286,7 @@ class Score(SmartTree):
 		return target_measure_eids.intersection(source_measure_eids)
 
 	def rename_duplicate_eids(self, source_score, duplicate_eids):
-		"""Rename duplicate measure eids in the source score to ensure uniqueness"""
+		"""Rename duplicate measure eids in the source score and update system lock references"""
 		import uuid
 		import base64
 		
@@ -304,9 +304,72 @@ class Score(SmartTree):
 			old_eid = eid_elem.text
 			if old_eid in eid_mapping:
 				eid_elem.text = eid_mapping[old_eid]
+		
+		# Update system lock references in the source score
+		src_score = source_score.tree.getroot().find(".//Score")
+		if src_score is not None:
+			system_locks = src_score.find("SystemLocks")
+			if system_locks is not None:
+				for system_lock in system_locks:
+					start_measure = system_lock.find("startMeasure")
+					end_measure = system_lock.find("endMeasure")
+					
+					# Update startMeasure reference if it points to a renamed eid
+					if start_measure is not None and start_measure.text in eid_mapping:
+						start_measure.text = eid_mapping[start_measure.text]
+					
+					# Update endMeasure reference if it points to a renamed eid  
+					if end_measure is not None and end_measure.text in eid_mapping:
+						end_measure.text = eid_mapping[end_measure.text]
+
+	def copy_pictures_to_target(self, source_score, target_score_path):
+		"""
+		Copy embedded pictures from source score to target score file
+		This should be called AFTER target.save() when the file exists
+		"""
+		import zipfile
+		import os
+		
+		try:
+			# Check if source has pictures
+			source_zip = zipfile.ZipFile(source_score.filename, 'r')  # FIXED: ZipFile not ZFile
+			picture_files = [f for f in source_zip.namelist() if f.startswith('Pictures/') and not f.endswith('/')]
+			
+			if not picture_files:
+				source_zip.close()
+				return 0
+				
+			# Check if target file exists
+			if not os.path.exists(target_score_path):
+				print(f"Warning: Target file {target_score_path} does not exist yet")
+				source_zip.close()
+				return 0
+			
+			# Open target zip file for appending
+			target_zip = zipfile.ZipFile(target_score_path, 'a')
+			
+			# Copy each picture
+			pictures_copied = 0
+			for picture_path in picture_files:
+				# Check if picture already exists in target
+				if picture_path not in target_zip.namelist():
+					# Read picture data from source
+					picture_data = source_zip.read(picture_path)
+					# Write to target
+					target_zip.writestr(picture_path, picture_data)
+					pictures_copied += 1
+					print(f"DEBUG: Copied picture: {picture_path}")
+			
+			target_zip.close()
+			source_zip.close()
+			
+			return pictures_copied
+				
+		except Exception as e:
+			print(f"Warning: Could not copy pictures from {source_score.basename}: {e}")
+			return 0
                 
-                
-	def concatenate_score(self, source_score, copy_frames=True, copy_title_frames=True, copy_system_locks=True):
+	def concatenate_score(self, source_score, copy_frames=True, copy_title_frames=True, copy_system_locks=True, copy_pictures=False, target_path=None):
 		"""
 		Unified method to concatenate another Score into this one.
 		"""
@@ -323,25 +386,16 @@ class Score(SmartTree):
 		# Check for eid conflicts before processing
 		duplicate_eids = self.find_duplicate_eids(source_score)
 		had_duplicates = bool(duplicate_eids)
-		#print(f"DEBUG: Duplicate eids found: {duplicate_eids}")
 		
 		# Rename duplicate eids to ensure target file has unique eids
 		if duplicate_eids:
-			#print(f"DEBUG: Renaming {len(duplicate_eids)} duplicate eids")
 			self.rename_duplicate_eids(source_score, duplicate_eids)
-			# Skip system locks since references would be broken
-			copy_system_locks_for_this_file = False
-		else:
-			copy_system_locks_for_this_file = copy_system_locks
 
 		# Get all staffs from both scores
 		tgt_staffs = tgt_score.findall(".//Staff")
 		src_staffs = src_score.findall(".//Staff")
 		
-		#print(f"DEBUG: Target staffs: {len(tgt_staffs)}, Source staffs: {len(src_staffs)}")
-		
 		if len(tgt_staffs) != len(src_staffs):
-			#print("DEBUG: Staff count mismatch, returning")
 			return had_duplicates
 		
 		# Process each staff individually
@@ -379,8 +433,8 @@ class Score(SmartTree):
 					elem_copy = deepcopy(elem)
 					tgt_staff.append(elem_copy)
 		
-		# Copy SystemLocks only if no duplicates were found
-		if copy_system_locks_for_this_file:
+		# Copy SystemLocks
+		if copy_system_locks:
 			src_system_locks = src_score.find("SystemLocks")
 			if src_system_locks is not None:
 				tgt_system_locks = tgt_score.find("SystemLocks")
@@ -392,8 +446,11 @@ class Score(SmartTree):
 						system_lock_copy = deepcopy(system_lock)
 						tgt_system_locks.append(system_lock_copy)
 		
-		#print(f"DEBUG: Completed concatenate_score for {source_score.basename}")
-		return had_duplicates  # Return whether duplicates were found and handled
+		# Copy pictures if requested and target path is provided
+		#if copy_pictures and target_path:
+		#	self.copy_pictures(source_score, target_path)
+		
+		return had_duplicates
 
 	def concatenate_measures(self, source_score):
 		"""Original method - copy only measures"""

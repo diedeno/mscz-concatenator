@@ -1,9 +1,27 @@
 #!/usr/bin/python3
+
+#  Copyright 2025 Diego Denolf <graffesmusic@gmail.com> 
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
+#
+
 """
 GUI wrapper for ms-concatenate.py
 ---------------------------------
 Provides a simple Tkinter interface to concatenate MuseScore files.
-2025 Diego Denolf <graffesmusic@gmail.com>
 """
 
 import tkinter as tk
@@ -15,14 +33,14 @@ import ms_concatenate  # must be in the same folder or installed as a module
 class ConcatenateGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("MuseScore Concatenator v1.2")
+        self.root.title("MuseScore Concatenator v1.3")
         self.files = []
 
         # --- Input files listbox with scrollbars ---
         frame_list = tk.Frame(root)
         frame_list.pack(padx=10, pady=5, fill="both", expand=True)
 
-        self.listbox = tk.Listbox(frame_list, width=60, height=10, selectmode=tk.SINGLE)
+        self.listbox = tk.Listbox(frame_list, width=60, height=10, selectmode=tk.EXTENDED)
         self.listbox.grid(row=0, column=0, sticky="nsew")
 
         vscroll = tk.Scrollbar(frame_list, orient="vertical", command=self.listbox.yview)
@@ -75,6 +93,15 @@ class ConcatenateGUI:
             variable=self.copy_system_locks_var
         )
         self.copy_system_locks_cb.grid(row=2, column=0, sticky="w", pady=2)
+        
+        # Copy pictures option
+        self.copy_pictures_var = tk.BooleanVar(value=True)
+        self.copy_pictures_cb = tk.Checkbutton(
+            options_frame, 
+            text="Copy embedded pictures from subsequent scores", 
+            variable=self.copy_pictures_var
+        )
+        self.copy_pictures_cb.grid(row=3, column=0, sticky="w", pady=2)
 
         # Update the toggle method name and logic
         def toggle_frame_options(self):
@@ -144,11 +171,12 @@ class ConcatenateGUI:
             self.output_entry.insert(0, f)
 
     def remove_selected(self):
-        sel = self.listbox.curselection()
-        if sel:
-            idx = sel[0]
-            self.files.pop(idx)
-            self.listbox.delete(idx)
+        selections = self.listbox.curselection()
+        if selections:
+            # Remove from the end to avoid index shifting issues
+            for index in sorted(selections, reverse=True):
+                self.files.pop(index)
+                self.listbox.delete(index)
 
     def clear_all(self):
         self.files.clear()
@@ -157,19 +185,40 @@ class ConcatenateGUI:
     # -------------------------------------------------------------------------
     # List reordering
     # -------------------------------------------------------------------------
+    
+    # allow only one file to move up/down
     def move_up(self):
-        sel = self.listbox.curselection()
-        if sel and sel[0] > 0:
-            idx = sel[0]
+        selections = self.listbox.curselection()
+        if len(selections) == 1 and selections[0] > 0:
+            idx = selections[0]
             self.files[idx-1], self.files[idx] = self.files[idx], self.files[idx-1]
             self.refresh_listbox(idx-1)
 
     def move_down(self):
-        sel = self.listbox.curselection()
-        if sel and sel[0] < len(self.files)-1:
-            idx = sel[0]
+        selections = self.listbox.curselection()
+        if len(selections) == 1 and selections[0] < len(self.files)-1:
+            idx = selections[0]
             self.files[idx+1], self.files[idx] = self.files[idx], self.files[idx+1]
             self.refresh_listbox(idx+1)
+    """
+    ## allow selection to move up/down
+    def move_up(self):
+        selections = self.listbox.curselection()
+        if selections and selections[0] > 0:  # Only if first selected item can move up
+            # For simplicity, let's just move the first selected item
+            idx = selections[0]
+            self.files[idx-1], self.files[idx] = self.files[idx], self.files[idx-1]
+            self.refresh_listbox(idx-1)
+
+    def move_down(self):
+        selections = self.listbox.curselection()
+        if selections and selections[-1] < len(self.files)-1:  # Only if last selected item can move down
+            # For simplicity, let's just move the last selected item  
+            idx = selections[-1]
+            self.files[idx+1], self.files[idx] = self.files[idx], self.files[idx+1]
+            self.refresh_listbox(idx+1)     
+    ###               
+    """        
 
     def refresh_listbox(self, new_index=None):
         self.listbox.delete(0, tk.END)
@@ -204,22 +253,24 @@ class ConcatenateGUI:
             copy_frames = self.copy_frames_var.get()
             copy_title_frames = self.copy_title_frames_var.get() if copy_frames else False
             copy_system_locks = self.copy_system_locks_var.get()
+            copy_pictures = self.copy_pictures_var.get()  # Add this
 
-            # Call the concatenate function with progress updates
+            # Call the concatenate function
             success, duplicate_warnings = ms_concatenate.concatenate(
                 self.files, 
                 output, 
                 copy_frames=copy_frames,
                 copy_title_frames=copy_title_frames,
                 copy_system_locks=copy_system_locks,
+                copy_pictures=copy_pictures,  # Add this
                 verbose=False,
                 progress_callback=self.update_progress
             )
       
             # Show duplicate warnings if any
             if duplicate_warnings:
-                warning_msg = f"Duplicate eids detected in: {', '.join(duplicate_warnings)}\n\nSystem locks from these files were skipped.\n\nTarget file has unique eids - you can add system locks manually if needed."
-                messagebox.showwarning("Duplicate EIDs", warning_msg)
+                info_msg = f"Duplicate eids detected in: {', '.join(duplicate_warnings)}\n\nEids were automatically renamed and system lock references were updated.\n\nAll system locks have been preserved."
+                messagebox.showinfo("EIDs Updated", info_msg)
      
             self.status.set("Done!")
             self.progress.pack_forget()  # Hide progress bar when done
@@ -246,13 +297,12 @@ class ConcatenateGUI:
         about.resizable(False, False)
 
         tk.Label(about, text="MuseScore Concatenator", font=("Arial", 14, "bold")).pack(pady=10)
-        tk.Label(about, text="Version 1.2", font=("Arial", 11)).pack(pady=2)
+        tk.Label(about, text="Version 1.3 (20251019)", font=("Arial", 11)).pack(pady=2)
         tk.Label(about, text="© 2025 Diego Denolf", font=("Arial", 10)).pack(pady=2)
-        tk.Label(about, text="Based on the mscore script and library © 2025 Leon Dionne", font=("Arial", 10)).pack(pady=2)
-
+        
         msg = (
             "Source: https://github.com/diedeno/mscz-concatenator\n" 
-            "Original code from https://github.com/Zen-Master-SoSo/mscore\n"
+            "Based on the mscore library and script © 2025 Leon Dionne https://github.com/Zen-Master-SoSo/mscore\n"
             
             "Licensed under the GNU GPL v3."
         )
