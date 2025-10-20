@@ -1,6 +1,7 @@
 mscz-concatenator changelog
 
-
+v2.3.1 20251020 -fixed eid format
+                -add .mscz to output file if missing              
 v1.3  20251019: -Multi-select file removal in the GUI
                 -eid handling with automatic renaming and system lock reference updates
                 -Embedded picture copying
