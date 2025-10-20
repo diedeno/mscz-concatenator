@@ -33,7 +33,7 @@ import ms_concatenate  # must be in the same folder or installed as a module
 class ConcatenateGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("MuseScore Concatenator v1.3")
+        self.root.title("MuseScore Concatenator v1.3.1")
         self.files = []
 
         # --- Input files listbox with scrollbars ---
@@ -169,6 +169,13 @@ class ConcatenateGUI:
         if f:
             self.output_entry.delete(0, tk.END)
             self.output_entry.insert(0, f)
+    
+    def get_output_path(self):
+        """Get output path with guaranteed .mscz extension"""
+        output_path = self.output_entry.get().strip()
+        if output_path and not output_path.lower().endswith('.mscz'):
+            output_path += '.mscz'
+        return output_path        
 
     def remove_selected(self):
         selections = self.listbox.curselection()
@@ -235,7 +242,7 @@ class ConcatenateGUI:
         if not self.files:
             messagebox.showerror("Error", "No input files selected")
             return
-        output = self.output_entry.get().strip()
+        output = self.get_output_path()  # ← Use the new method
         if not output:
             messagebox.showerror("Error", "No output file specified")
             return
@@ -297,7 +304,7 @@ class ConcatenateGUI:
         about.resizable(False, False)
 
         tk.Label(about, text="MuseScore Concatenator", font=("Arial", 14, "bold")).pack(pady=10)
-        tk.Label(about, text="Version 1.3 (20251019)", font=("Arial", 11)).pack(pady=2)
+        tk.Label(about, text="Version 1.3.1 (20251020)", font=("Arial", 11)).pack(pady=2)
         tk.Label(about, text="© 2025 Diego Denolf", font=("Arial", 10)).pack(pady=2)
         
         msg = (

@@ -287,12 +287,35 @@ class Score(SmartTree):
 
 	def rename_duplicate_eids(self, source_score, duplicate_eids):
 		"""Rename duplicate measure eids in the source score and update system lock references"""
-		import uuid
+		import os
 		import base64
 		
 		def generate_new_eid():
-			"""Generate a new unique eid similar to MuseScore's format"""
-			return base64.urlsafe_b64encode(uuid.uuid4().bytes).decode('utf-8').rstrip('=')
+			"""Generate a new unique eid in MuseScore's exact two-part format"""
+			# Generate 16 random bytes (two 64-bit values) like MuseScore's std::mt19937_64
+			random_bytes = os.urandom(16)
+			
+			# Split into two 64-bit integers (little-endian)
+			int1 = int.from_bytes(random_bytes[:8], byteorder='little')
+			int2 = int.from_bytes(random_bytes[8:], byteorder='little')
+			
+			# Standard base64 characters (same as MuseScore)
+			chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+			
+			def to_base64(n):
+				"""Convert uint64_t to base64 string like MuseScore's toBase64Chars"""
+				if n == 0:
+					return chars[0]
+				result = ""
+				while n > 0:
+					result = chars[n % 64] + result  # Most significant first
+					n = n // 64
+				return result
+			
+			part1 = to_base64(int1)
+			part2 = to_base64(int2)
+			
+			return f"{part1}_{part2}"
 		
 		# Create mapping from old to new eids
 		eid_mapping = {}
@@ -358,7 +381,7 @@ class Score(SmartTree):
 					# Write to target
 					target_zip.writestr(picture_path, picture_data)
 					pictures_copied += 1
-					print(f"DEBUG: Copied picture: {picture_path}")
+					#print(f"DEBUG: Copied picture: {picture_path}")
 			
 			target_zip.close()
 			source_zip.close()
