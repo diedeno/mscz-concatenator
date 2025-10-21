@@ -1,12 +1,14 @@
 mscz-concatenator changelog
 
-v1.4  202510??  -New Layout Break Options in the GUI: No break, Section break, or Page break;  
+v1.4  202510??  -New Layout Break Options in the GUI: No break, Section break, Page break or System break;  
                  to insert between concatenated files. 
                 -Prevent duplicate breaks by checking if a measure already has a layout break
-                -When "Section break" is selected, additional options appear: Pause duration (default: 0 second),
-                 Start with long names (default: enabled), Start with measure one (default: enabled), 
-                 First system indentation (default: enabled), Show courtesy signatures (default: enabled) 
-                 => same defaults as MuseScore except for the pauze (bug with repeats on last measure)
+                -When "Section break" is selected, additional options appear: Pause (default: 3 seconds),
+                 Start with long instrument names (default: enabled), Reset measure numbers (default: enabled), 
+                 Indent first system (default: enabled), Hide courtesy clefs and signatures (default: enabled) 
+                 => same defaults as MuseScore
+                -repeat detection for automatic pause=0
+                - 
 v1.3.1 20251020 -fixed eid format
                 -add .mscz to output file if missing         
 v1.3  20251019: -Multi-select file removal in the GUI
