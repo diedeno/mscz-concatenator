@@ -8,7 +8,7 @@ v1.4  202510??  -New Layout Break Options in the GUI: No break, Section break, P
                  Indent first system (default: enabled), Hide courtesy clefs and signatures (default: enabled) 
                  => same defaults as MuseScore
                 -repeat detection for automatic pause=0
-                - 
+                -skip adding system break if a systemlock exists. 
 v1.3.1 20251020 -fixed eid format
                 -add .mscz to output file if missing         
 v1.3  20251019: -Multi-select file removal in the GUI
