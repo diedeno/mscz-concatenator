@@ -17,6 +17,7 @@ Build upon [**ms-concatenate.py**](https://github.com/Zen-Master-SoSo/mscore/blo
 - Reorder files before concatenation.
 - choose to copy frames, title frames, pictures and/or systemlocks
 - eid conflict resolution
+- add system break, page break or section break after each score
 - Available as: - Windows standalone `.exe` and Linux executable
 ---
 
