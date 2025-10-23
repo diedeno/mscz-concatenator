@@ -4,7 +4,7 @@
 
 This application lets you **concatenate multiple MuseScore `.mscz` files** into a single new file.
 
-All sources must have the same part / instrument structure.
+**All sources must have the same part / instrument structure.**
 
 Build upon [**ms-concatenate.py**](https://github.com/Zen-Master-SoSo/mscore/blob/master/scripts/ms_concatenate.py), part of the [Zen-Master-SoSo/mscore](https://github.com/Zen-Master-SoSo/mscore) library, announced on https://linuxmusicians.com/viewtopic.php?t=28728
 
@@ -18,6 +18,8 @@ Build upon [**ms-concatenate.py**](https://github.com/Zen-Master-SoSo/mscore/blo
 - choose to copy frames, title frames, pictures and/or systemlocks
 - eid conflict resolution
 - add system break, page break or section break after each score
+- optional: skip files with incompatible instrumentation
+- optional; log to file
 - Available as: - Windows standalone `.exe` and Linux executable
 ---
 
