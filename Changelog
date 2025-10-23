@@ -12,6 +12,7 @@ v1.4  202510??  -New Layout Break Options in the GUI: Section break, Page break 
                 -fix bug with repeats detection
                 -optional skip incompatible files option 
                 -optional logging - WARN: Skipped files only | INFO: Basic details | DEBUG: All details
+                -optional custom log file location 
                 -removed message box for duplicate eid's: logged instead
 v1.3.1 20251020 -fixed eid format
                 -add .mscz to output file if missing         
