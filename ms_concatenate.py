@@ -34,148 +34,304 @@ import sys
 import argparse
 import os
 from os import linesep
+from datetime import datetime
 from shutil import copy2 as copy
 from itertools import combinations
 from os.path import realpath
 from mscore import Score, VoiceName
 from mscore.fuzzy import FuzzyCandidate, FuzzyName
+from datetime import datetime
 
-
-def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=True, copy_system_locks=True, copy_pictures=False, verbose=False, progress_callback=None):
+def setup_logging(log_level="INFO", log_file=None, console_output=False, overwrite_log=False):
     """
-    Concatenate MuseScore files into one.
-
-    :param source_paths: list of paths to source score files (at least 2)
-    :param target_path: path to the output score file
-    :param copy_frames: whether to copy frames from subsequent scores
-    :param copy_title_frames: whether to copy title frames from subsequent scores
-    :param verbose: whether to show debug logging
-    :param progress_callback: callback function for progress updates (current, total)
+    Set up logging configuration
+    
+    :param log_level: INFO or DEBUG or WARN (None for no logging)
+    :param log_file: Path to log file, or None for no file logging
+    :param console_output: Whether to also output to console (default: False)
+    :param overwrite_log: Whether to overwrite the log file (default: False - append)
     """
+    # Create logger
+    logger = logging.getLogger('mscz_concatenator')
+    
+    # Remove existing handlers to avoid duplicates
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
+    # If log_level is None, return a null logger
+    if log_level is None:
+        logger.addHandler(logging.NullHandler())
+        return logger
+    
+    # Set log level for active logging
+    logger.setLevel(getattr(logging, log_level.upper()))
+    
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    # Console handler (only if requested)
+    if console_output:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(getattr(logging, log_level.upper()))
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+    
+    # File handler (if specified)
+    if log_file:
+        file_mode = 'w' if overwrite_log else 'a'
+        file_handler = logging.FileHandler(log_file, mode=file_mode)
+        file_handler.setLevel(getattr(logging, log_level.upper()))
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    
+    return logger
+
+# Global logger instance
+logger = None
+
+def validate_and_skip_files(target, sources):
+    """
+    Validate files and return lists of valid files and skipped files with reasons
+    """
+    valid_sources = []
+    skipped_files = []
+    
+    for src in sources:
+        try:
+            src_parts = src.part_names()
+            target_parts = target.part_names()
+            
+            # Clean both part lists (remove None and empty values)
+            src_parts_clean = [part for part in src_parts if part is not None and part != ""]
+            target_parts_clean = [part for part in target_parts if part is not None and part != ""]
+            
+            # Check for text-only files
+            if not src_parts_clean:
+                skipped_files.append({
+                    'file': src.basename,
+                    'reason': 'Contains no musical parts (only text frames)'
+                })
+                continue
+            
+            # Check instrumentation match - WITHOUT sorting to preserve order
+            if src_parts_clean != target_parts_clean:  # Remove sorted() here
+                skipped_files.append({
+                    'file': src.basename, 
+                    'reason': f'Different instrumentation. Target: {target_parts_clean}, File: {src_parts_clean}'
+                })
+                continue
+            
+            valid_sources.append(src)
+            
+        except Exception as e:
+            skipped_files.append({
+                'file': src.basename,
+                'reason': f'Validation error: {str(e)}'
+            })
+    
+    return valid_sources, skipped_files
+    
+    
+def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=True, 
+                copy_system_locks=True, copy_pictures=False, verbose=False, 
+                progress_callback=None, break_type="none", break_options=None,
+                log_level="INFO", log_file=None, skip_incompatible=True, 
+                console_output=False, overwrite_log=False):
+    
+    global logger
+    logger = setup_logging(log_level, log_file, console_output, overwrite_log)
+    
+    logger.info(f"Starting concatenation of {len(source_paths)} files")
+    logger.info(f"Source files: {[os.path.basename(f) for f in source_paths]}")
+    logger.info(f"Target file: {os.path.basename(target_path)}")
+    logger.info(f"Options - Copy frames: {copy_frames}, Copy title frames: {copy_title_frames}, "
+                f"Copy system locks: {copy_system_locks}, Copy pictures: {copy_pictures}")
+    logger.info(f"Break type: {break_type}, Skip incompatible: {skip_incompatible}")
+    
     if len(source_paths) < 2:
+        logger.error("At least two source files required")
         raise ValueError("You must provide at least two sources.")
         
     # Ensure only .mscz is used
     for src in source_paths:
         if not src.lower().endswith(".mscz"):
+            logger.error(f"Unsupported file type: {src}")
             raise ValueError(f"Unsupported file type: {src}. Only .mscz files are supported.")
 
     if not target_path.lower().endswith(".mscz"):
+        logger.error(f"Target must be .mscz file: {target_path}")
         raise ValueError(f"Target must be a .mscz file (got {target_path})")    
 
     target_path = realpath(target_path)
     source_paths = [realpath(src) for src in source_paths]
 
     if target_path in source_paths:
+        logger.error("Target cannot be one of the source files")
         raise ValueError("Sources and Target must be different paths")
-
-    # Print info  -- remove for exe 
-    # print("Concatenating:")
-    # print(linesep.join(source_paths))
-    # print("Target:")
-    # print(target_path)
-    # print(f"Copy frames: {copy_frames}")
-    # print(f"Copy title frames: {copy_title_frames}")
 
     # Sanity checks
     for a, b in combinations(source_paths, 2):
         if a == b:
+            logger.error("Duplicate source files detected")
             raise ValueError("More than one Source are the same file")
-    # Make sure duplicate_warnings is defined
+    
     duplicate_warnings = []
+    skipped_files = []
     
     # Update progress for base file (file 1)
     if progress_callback:
         progress_callback(1, len(source_paths))
 
     # Copy first file to target (includes all frames and measures from first score)
+    logger.info(f"Using first file as base: {os.path.basename(source_paths[0])}")
     copy(source_paths[0], target_path)
     target = Score(target_path)
+    logger.debug(f"First file loaded as target: {target.basename}")
 
-    # Load rest
+    # Load rest of the files
     sources = [Score(src) for src in source_paths[1:]]
-    for src in sources:
-        # Get and clean part names FIRST, before any sorting
-        src_parts = src.part_names()
-        target_parts = target.part_names()
+    logger.info(f"Additional files to concatenate: {[s.basename for s in sources]}")
+    
+    # Validate and potentially skip files
+    if skip_incompatible:
+        logger.info("Checking file compatibility...")
+        valid_sources, skipped_files = validate_and_skip_files(target, sources)
         
-        # Clean both part lists (remove None and empty values)
-        src_parts_clean = [part for part in src_parts if part is not None and part != ""]
-        target_parts_clean = [part for part in target_parts if part is not None and part != ""]
+        # Log skipped files
+        for skipped in skipped_files:
+            logger.warning(f"Skipped {skipped['file']}: {skipped['reason']}")
         
-        # Check for text-only files first
-        if not src_parts_clean:
-            raise ValueError(
-                f'File "{src.basename}" contains no musical parts (only text frames).\n'
-                "This file cannot be concatenated with musical scores.\n"
-                "Please remove it from the file list."
-            )
-        
-        # Also check if target has no parts (shouldn't happen, but just in case)
-        if not target_parts_clean:
-            raise ValueError(
-                f'The first file "{os.path.basename(source_paths[0])}" contains no musical parts.\n'
-                "Please select a different file as the first file."
-            )
-        
-        # Now sort and compare
-        if sorted(src_parts_clean) != sorted(target_parts_clean):
-            first_filename = os.path.basename(source_paths[0])
+        if skipped_files:
+            logger.info(f"Skipped {len(skipped_files)} file(s) due to incompatibility")
+        else:
+            logger.info("All files are compatible")
             
-            raise ValueError(
-                f'File "{src.basename}" does not have the same part names as the first file "{first_filename}"\n'
-                #f'First file parts: {sorted(target_parts_clean)}\n'
-                #f'This file parts: {sorted(src_parts_clean)}\n'
-                "All files must have the same instrument parts to be concatenated."
-            )
+        sources = valid_sources
+    else:
+        logger.info("Using strict validation (will raise errors for incompatible files)")
+        # Use original validation (will raise exceptions)
+        for src in sources:
+            src_parts = src.part_names()
+            target_parts = target.part_names()
             
-       # Logging
-            logging.basicConfig(
-                level=logging.DEBUG if verbose else logging.ERROR,
-                format="[%(filename)24s:%(lineno)3d] %(message)s"
-            )            
+            # Clean both part lists
+            src_parts_clean = [part for part in src_parts if part is not None and part != ""]
+            target_parts_clean = [part for part in target_parts if part is not None and part != ""]
+            
+            # Check for text-only files
+            if not src_parts_clean:
+                logger.error(f"File {src.basename} contains no musical parts")
+                raise ValueError(f'File "{src.basename}" contains no musical parts')
+            
+            # Check instrumentation match - WITHOUT sorting to preserve order
+            if src_parts_clean != target_parts_clean:  # Remove sorted() here
+                logger.error(f"File {src.basename} has different instrumentation")
+                raise ValueError(f'File "{src.basename}" has different instrumentation')
+        
+        skipped_files = []
 
-         
-    # Concatenate using the unified method with progress updates
+    # Add layout breaks to the FIRST file if requested
+    if break_type != "none" and len(sources) >= 1:
+        break_types = break_type.split(',') if ',' in break_type else [break_type]
+        logger.info(f"Adding layout breaks to first file: {break_types}")
+        
+        for bt in break_types:
+            if bt != "none":
+                logger.debug(f"Processing break type: {bt}")
+                current_break_options = break_options if bt == "section" else None
+                _add_layout_break(target, bt, current_break_options)
+
+    # Process each source file
+    logger.info(f"Starting concatenation of {len(sources)} compatible files")
     for i, source in enumerate(sources):
-            had_duplicates = target.concatenate_score(
-                source, 
-                copy_frames=copy_frames,
-                copy_title_frames=copy_title_frames,
-                copy_system_locks=copy_system_locks,
-                copy_pictures=copy_pictures,
-                target_path=target_path
-            )
+        logger.info(f"Processing file {i+1}/{len(sources)}: {source.basename}")
             
-            if had_duplicates:
-                duplicate_warnings.append(source.basename)
-            
-            # Update progress
-            if progress_callback:
-                progress_callback(i + 2, len(source_paths))
+        # Add layout breaks BEFORE concatenating this file (except for the first file)
+        if break_type != "none" and i > 0:
+            break_types = break_type.split(',') if ',' in break_type else [break_type]
+            logger.debug(f"Adding breaks before file {source.basename}: {break_types}")
+                
+            for bt in break_types:
+                if bt != "none":
+                    logger.debug(f"Processing break type: {bt}")
+                        
+                    current_break_options = None
+                    if bt == "section" and break_options:
+                        auto_detect_enabled = break_options.get('auto_detect_repeats', False)
+                        target_has_repeats = target.has_repeats_in_last_measure()
+                            
+                        logger.debug(f"Repeat check - Auto-detect: {auto_detect_enabled}, Has repeats: {target_has_repeats}")
+                            
+                        if auto_detect_enabled and target_has_repeats:
+                            logger.info(f"Target has repeats, setting pause to 0 for {source.basename}")
+                            current_break_options = break_options.copy()
+                            current_break_options['pause'] = 0.0
+                        else:
+                            current_break_options = break_options
+                        
+                    _add_layout_break(target, bt, current_break_options)
 
-    # Show duplicate warnings
-    if duplicate_warnings and verbose:
-        print(f"Note: Duplicate eids automatically resolved in: {', '.join(duplicate_warnings)}")
+        # Concatenate the source file
+        logger.debug(f"Concatenating {source.basename}...")
+        had_duplicates = target.concatenate_score(
+            source, 
+            copy_frames=copy_frames,
+            copy_title_frames=copy_title_frames,
+            copy_system_locks=copy_system_locks,
+            copy_pictures=copy_pictures,
+            target_path=target_path
+        )
+        
+        if had_duplicates:
+            logger.info(f"Duplicate eids resolved in {source.basename}")
+            duplicate_warnings.append(source.basename)
+        
+        logger.info(f"Successfully concatenated {source.basename}")
+        
+        # Update progress
+        if progress_callback:
+            progress_callback(i + 2, len(source_paths))
 
+    # Final operations
+    logger.info("Saving concatenated score...")
     target.save()
     
-    # copy pictures (after the file exists)
-    total_pictures_copied = 0  #  initializing
-    
+    # Copy pictures if requested
+    total_pictures_copied = 0
     if copy_pictures:
-        total_pictures_copied = 0
+        logger.info("Copying embedded pictures...")
         for source in sources:
             pictures_copied = target.copy_pictures_to_target(source, target_path)
             total_pictures_copied += pictures_copied
-            if pictures_copied > 0 and verbose:
-                print(f"Copied {pictures_copied} pictures from {source.basename}")
+            if pictures_copied > 0:
+                logger.info(f"Copied {pictures_copied} pictures from {source.basename}")
         
-    if total_pictures_copied > 0 and verbose:
-            print(f"Total pictures copied: {total_pictures_copied}")
+    if total_pictures_copied > 0:
+        logger.info(f"Total pictures copied: {total_pictures_copied}")
     
-    # Return both values
-    return True, duplicate_warnings
+    # Final summary
+    files_processed = len(sources)
+    files_skipped = len(skipped_files)
+    logger.info(f"Concatenation completed: {files_processed} files processed, {files_skipped} files skipped")
+    
+    if duplicate_warnings:
+        logger.info(f"Duplicate eids resolved in: {', '.join(duplicate_warnings)}")
+    
+    return True, skipped_files
+    
+def _add_layout_break(score, break_type, break_options):
+    """
+    Add a layout break to the last measure of the score
+    """
+    if break_type == "none":
+        return
+        
+    logger.debug(f"_add_layout_break: Adding layout break of type {break_type} to score {score.basename}")
+    
+    # Use the Score's method to add the layout break
+    score.add_layout_break(break_type, break_options)
+    logger.debug(f"_add_layout_break: Method called successfully")
+    
 
 def main():
     p = argparse.ArgumentParser()
@@ -212,6 +368,7 @@ def main():
             
     except Exception as e:
         p.error(str(e))
+        
 
 
 if __name__ == "__main__":

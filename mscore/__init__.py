@@ -350,8 +350,13 @@ class Score(SmartTree):
 		Copy embedded pictures from source score to target score file
 		This should be called AFTER target.save() when the file exists
 		"""
+
 		import zipfile
 		import os
+        
+		# Create a local logger for this method
+		import logging
+		logger = logging.getLogger('mscz_concatenator')
 		
 		try:
 			# Check if source has pictures
@@ -381,7 +386,7 @@ class Score(SmartTree):
 					# Write to target
 					target_zip.writestr(picture_path, picture_data)
 					pictures_copied += 1
-					#print(f"DEBUG: Copied picture: {picture_path}")
+					logger.debug(f"Copied picture: {picture_path}")
 			
 			target_zip.close()
 			source_zip.close()
@@ -389,9 +394,227 @@ class Score(SmartTree):
 			return pictures_copied
 				
 		except Exception as e:
-			print(f"Warning: Could not copy pictures from {source_score.basename}: {e}")
+			logger.info(f"Info: Could not copy pictures from {source_score.basename}: {e}")
 			return 0
+            
+	def add_layout_break(self, break_type, break_options=None):
+		"""
+		Add a layout break to the last measure of the score
+		"""
+		# Create a local logger for this method
+		import logging
+		logger = logging.getLogger('mscz_concatenator')
+			
+		logger.debug(f"Called with break_type: {break_type}")
+		
+		if break_type == "none":
+			return
+			
+		# Get all staffs from the score
+		all_staffs = self.tree.getroot().findall(".//Staff")
+		
+		# Find staffs that actually have measures (those with numeric IDs)
+		staffs_with_measures = []
+		for staff in all_staffs:
+			staff_id = staff.get('id')
+			measures = [child for child in staff if child.tag == "Measure"]
+			if measures and staff_id and staff_id.isdigit():
+				staffs_with_measures.append(staff)
+		
+		if not staffs_with_measures:
+			return
+			
+		# Use the first staff that has measures
+		first_staff_with_measures = staffs_with_measures[0]
+		staff_id = first_staff_with_measures.get('id')
+		measures = [child for child in first_staff_with_measures if child.tag == "Measure"]
+		
+		if not measures:
+			return
+			
+		last_measure = measures[-1]
+		
+		# Check if this measure already has a LayoutBreak of the SAME type
+		existing_breaks = last_measure.findall("LayoutBreak")
+		logger.debug(f"Found {len(existing_breaks)} existing breaks in measure")
+		
+		for i, existing_break in enumerate(existing_breaks):
+			existing_subtype_elem = existing_break.find("subtype")
+			logger.debug(f"Existing break {i}: subtype element exists: {existing_subtype_elem is not None}")
+			if existing_subtype_elem is not None:
+				logger.debug(f"Existing break {i}: subtype text: '{existing_subtype_elem.text}'")
+			if existing_subtype_elem is not None and existing_subtype_elem.text == break_type:
+				logger.debug(f"Measure already has a {break_type} break, skipping...")
+				return
+			else:
+				logger.debug(f"Found existing break of different type: '{existing_subtype_elem.text if existing_subtype_elem else 'unknown'}'")
                 
+
+			
+  
+		# Check for system locks in this measure (only skip SYSTEM breaks for system locks)
+		if break_type == "line":  # Only system breaks conflict with system locks
+			score_element = self.tree.getroot().find(".//Score")
+			if score_element is not None:
+				system_locks = score_element.find("SystemLocks")
+				logger.debug(f"SystemLocks element found: {system_locks is not None}")
+				
+				if system_locks is not None:
+					# Get the eid of the current measure
+					measure_eid_elem = last_measure.find("eid")
+					if measure_eid_elem is not None:
+						measure_eid = measure_eid_elem.text
+						logger.debug(f"Checking measure eid: {measure_eid}")
+						
+						# Check if any system lock references this measure eid
+						for system_lock in system_locks:
+							start_measure_elem = system_lock.find("startMeasure")
+							end_measure_elem = system_lock.find("endMeasure")
+							
+							logger.debug(f"SystemLock - start: {start_measure_elem.text if start_measure_elem else 'None'}, end: {end_measure_elem.text if end_measure_elem else 'None'}")
+							
+							# Check if this measure is referenced in any system lock
+							if ((start_measure_elem is not None and start_measure_elem.text == measure_eid) or
+								(end_measure_elem is not None and end_measure_elem.text == measure_eid)):
+								logger.debug(f"Measure has system lock, skipping system break...")
+								return
+                        
+                                
+		# Generate eid first
+		import os
+		
+		# Generate 16 random bytes (two 64-bit values) like MuseScore's std::mt19937_64
+		random_bytes = os.urandom(16)
+		
+		# Split into two 64-bit integers (little-endian)
+		int1 = int.from_bytes(random_bytes[:8], byteorder='little')
+		int2 = int.from_bytes(random_bytes[8:], byteorder='little')
+		
+		# Standard base64 characters (same as MuseScore)
+		chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+		
+		def to_base64(n):
+			"""Convert uint64_t to base64 string like MuseScore's toBase64Chars"""
+			if n == 0:
+				return chars[0]
+			result = ""
+			while n > 0:
+				result = chars[n % 64] + result  # Most significant first
+				n = n // 64
+			return result
+		
+		part1 = to_base64(int1)
+		part2 = to_base64(int2)
+		layout_break_eid = f"{part1}_{part2}"
+		
+		# Create the LayoutBreak element
+		layout_break = et.Element("LayoutBreak")
+		
+		# Add eid as a child element
+		eid_element = et.SubElement(layout_break, "eid")
+		eid_element.text = layout_break_eid
+		
+		# Add subtype as a child element
+		subtype_element = et.SubElement(layout_break, "subtype")
+		subtype_element.text = break_type
+		
+		if break_type == "section" and break_options:
+			# Only include options that differ from defaults
+			pause_value = break_options.get('pause', 3)  # Default is 3
+			if pause_value != 3:
+				pause = et.SubElement(layout_break, "pause")
+				pause.text = str(int(pause_value))  # Convert to int
+			
+			start_with_long_names = break_options.get('start_with_long_names', False)
+			if not start_with_long_names:  # Only include if False (default is True)
+				start_with_long_names_elem = et.SubElement(layout_break, "startWithLongNames")
+				start_with_long_names_elem.text = "0"
+			
+			start_with_measure_one = break_options.get('start_with_measure_one', False)
+			if not start_with_measure_one:  # Only include if False (default is True)
+				start_with_measure_one_elem = et.SubElement(layout_break, "startWithMeasureOne")
+				start_with_measure_one_elem.text = "0"
+			
+			first_system_indentation = break_options.get('first_system_indentation', False)
+			if not first_system_indentation:  # Only include if False (default is True)
+				first_system_indentation_elem = et.SubElement(layout_break, "firstSystemIndentation")
+				first_system_indentation_elem.text = "0"
+			
+			show_courtesy_sig = break_options.get('show_courtesy_sig', True)
+			#logger.debug(f"show_courtesy_sig value from options: {show_courtesy_sig}")
+
+			if show_courtesy_sig:  # If "Hide" is checked
+				show_courtesy_sig_elem = et.SubElement(layout_break, "showCourtesySig")
+				show_courtesy_sig_elem.text = "0"  # Hide courtesy signatures
+				#print("DEBUG: Added showCourtesySig=0 (hide)")
+			else:  # If "Hide" is unchecked  
+				show_courtesy_sig_elem = et.SubElement(layout_break, "showCourtesySig")
+				show_courtesy_sig_elem.text = "1"  # Show courtesy signatures
+				#print("DEBUG: Added showCourtesySig=1 (show)")
+		
+		#logger.debug(f"Created layout break with eid: {layout_break_eid}")
+		
+		# Add to the last measure
+		last_measure.append(layout_break)
+		#logger.debug(f"Added layout break to last measure")
+		
+		# Verify it was added
+		added_breaks = last_measure.findall("LayoutBreak")
+		#logger.debug(f"Now found {len(added_breaks)} layout breaks in last measure")
+        
+		# After creating and adding the layout break, add this:
+		logger.debug(f"Successfully added {break_type} break to measure")
+		logger.debug(f"Measure now has {len(last_measure.findall('LayoutBreak'))} breaks")        
+        
+        
+	def has_repeats_in_last_measure(self):
+		"""
+		Check if the last measure of the score contains repeat elements
+		"""
+		# Get all staffs from the score
+		all_staffs = self.tree.getroot().findall(".//Staff")
+		
+		# Find staffs that actually have measures (those with numeric IDs)
+		staffs_with_measures = []
+		for staff in all_staffs:
+			staff_id = staff.get('id')
+			measures = [child for child in staff if child.tag == "Measure"]
+			if measures and staff_id and staff_id.isdigit():
+				staffs_with_measures.append(staff)
+		
+		if not staffs_with_measures:
+			return False
+			
+		# Use the first staff that has measures
+		first_staff_with_measures = staffs_with_measures[0]
+		measures = [child for child in first_staff_with_measures if child.tag == "Measure"]
+		
+		if not measures:
+			return False
+			
+		last_measure = measures[-1]
+		
+		# Check for actual repeat elements in the last measure
+		# Look for direct children of the Measure element
+		end_repeats = last_measure.findall("endRepeat")  # End repeat barlines
+		jumps = last_measure.findall("Jump")  # D.C., D.S. instructions
+		
+		# Also check for text elements that might indicate repeats (search in voice)
+		text_elements = last_measure.findall(".//Text")  # Anywhere in measure
+		repeat_texts = [text for text in text_elements if any(word in (text.findtext('text') or '').lower() 
+						   for word in ['d.c.', 'd.s.', 'd.c. al', 'd.s. al', 'da capo', 'dal segno'])]
+		
+		has_repeats = (len(end_repeats) > 0 or len(jumps) > 0 or len(repeat_texts) > 0)
+		
+		logger.debug(f"Last measure analysis for {self.basename}:")
+		print(f"  - endRepeats: {len(end_repeats)}")
+		print(f"  - Jumps: {len(jumps)}") 
+		print(f"  - Repeat text elements: {len(repeat_texts)}")
+		print(f"  - Has repeats: {has_repeats}")
+		
+		return has_repeats        
+
+					
 	def concatenate_score(self, source_score, copy_frames=True, copy_title_frames=True, copy_system_locks=True, copy_pictures=False, target_path=None):
 		"""
 		Unified method to concatenate another Score into this one.
@@ -434,7 +657,7 @@ class Score(SmartTree):
 			
 			# Copy elements based on options
 			first_frame = True
-			
+
 			for elem in src_elements:
 				if elem.tag == "Measure":
 					# Always copy measures
