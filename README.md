@@ -6,8 +6,6 @@ This application lets you **concatenate multiple MuseScore `.mscz` files** into 
 
 **All sources must have the same part / instrument structure.**
 
-Build upon [**ms-concatenate.py**](https://github.com/Zen-Master-SoSo/mscore/blob/master/scripts/ms_concatenate.py), part of the [Zen-Master-SoSo/mscore](https://github.com/Zen-Master-SoSo/mscore) library, announced on https://linuxmusicians.com/viewtopic.php?t=28728
-
 ---
 
 ![screenshot](screenshot.png)
@@ -48,4 +46,8 @@ Run the GUI:
 python3 mscz-concatenator.py
 ````
 
+## Implementation
+
+The development of this application is based on earlier work:
+[**ms-concatenate.py**](https://github.com/Zen-Master-SoSo/mscore/blob/master/scripts/ms_concatenate.py), part of the [Zen-Master-SoSo/mscore](https://github.com/Zen-Master-SoSo/mscore) library, announced on https://linuxmusicians.com/viewtopic.php?t=28728
 
