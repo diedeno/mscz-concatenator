@@ -1,8 +1,8 @@
 mscz-concatenator changelog
 
-v1.4  202510??  -New Layout Break Options in the GUI: Section break, Page break or System break;  
+v1.4  20251024  -New Layout Break Options in the GUI: Section break, Page break or System break;  
                  to insert between concatenated files. Only possible combinations can be selected.
-                -Prevent duplicate breaks by checking if a measure already has a layout break
+                -Prevent duplicate breaks
                 -When "Section break" is selected, additional options appear: Pause (default: 3 seconds),
                  Start with long instrument names (default: enabled), Reset measure numbers (default: enabled), 
                  Indent first system (default: enabled), Hide courtesy clefs and signatures (default: enabled) 
