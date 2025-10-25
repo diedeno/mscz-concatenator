@@ -51,3 +51,8 @@ python3 mscz-concatenator.py
 The development of this application is based on earlier work:
 [**ms-concatenate.py**](https://github.com/Zen-Master-SoSo/mscore/blob/master/scripts/ms_concatenate.py), part of the [Zen-Master-SoSo/mscore](https://github.com/Zen-Master-SoSo/mscore) library, announced on https://linuxmusicians.com/viewtopic.php?t=28728
 
+---
+
+## License
+
+This application is licensed under the **GPLv3 License**. See the `LICENSE` file for details.
