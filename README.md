@@ -58,3 +58,8 @@ The development of this application is based on earlier work:
 ## License
 
 This application is licensed under the **GPLv3 License**. See the `LICENSE` file for details.
+
+---
+
+## Support
+For issues or questions, please use Issues menu in this repository.
