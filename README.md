@@ -11,7 +11,7 @@ This application lets you **concatenate multiple MuseScore `.mscz` files** into 
 ![screenshot](screenshot.png)
 
 ### Features 
-- Combine multiple `.mscz` MuseScore files into one.Fix typo and add implementation details in README
+- Combine multiple `.mscz` MuseScore files into one.
 - Reorder files before concatenation.
 - choose to copy frames, title frames, pictures and/or systemlocks
 - eid conflict resolution
