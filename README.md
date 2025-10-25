@@ -17,7 +17,7 @@ This application lets you **concatenate multiple MuseScore `.mscz` files** into 
 - eid conflict resolution
 - add system break, page break or section break after each score
 - optional: skip files with incompatible instrumentation
-- optional; log to file
+- optional: log to file
 - Available as: - Windows standalone `.exe` and Linux executable
 ---
 
@@ -45,6 +45,8 @@ Run the GUI:
 ```bash
 python3 mscz-concatenator.py
 ````
+
+---
 
 ## Implementation
 
