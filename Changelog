@@ -1,5 +1,8 @@
 mscz-concatenator changelog
 
+v1.5  202510??  -add options to load/save selection from file
+                -implement fuzzy part matching, using the fuzzy.py module from the mscore library.
+                -fix bug with progress bar
 v1.4  20251024  -New Layout Break Options in the GUI: Section break, Page break or System break;  
                  to insert between concatenated files. Only possible combinations can be selected.
                 -Prevent duplicate breaks
