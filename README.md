@@ -18,6 +18,8 @@ This application lets you **concatenate multiple MuseScore `.mscz` files** into 
 - add system break, page break or section break after each score
 - optional: skip files with incompatible instrumentation
 - optional: log to file
+- load/save selection from file
+- fuzzy part matching
 - Available as: - Windows standalone `.exe` and Linux executable
 ---
 
