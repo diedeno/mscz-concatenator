@@ -6,6 +6,8 @@ This application lets you **concatenate multiple MuseScore `.mscz` files** into 
 
 **All sources must have the same part / instrument structure.**
 
+Consider using the mscz-trackname-editor to match part names. https://github.com/diedeno/mscz_trackname_editor
+
 ---
 
 ![screenshot](screenshot.png)
