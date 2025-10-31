@@ -1,6 +1,6 @@
 mscz-concatenator changelog
 
-v1.5  202510??  -add options to load/save selection from file
+v1.5  20251031  -add options to load/save selection from file
                 -implement fuzzy part matching, using the fuzzy.py module from Leon Dionne's mscore library.
                 -fix bug with progress bar
                 -changed layout to keep everything compact
