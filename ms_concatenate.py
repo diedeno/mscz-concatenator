@@ -39,7 +39,7 @@ from shutil import copy2 as copy
 from itertools import combinations
 from os.path import realpath
 from mscore import Score, VoiceName
-from mscore.fuzzy import FuzzyCandidate, FuzzyName
+from mscore.fuzzy import FuzzyCandidate, FuzzyName, IGNORE, MATCH, PREFER
 from datetime import datetime
 
 def setup_logging(log_level="INFO", log_file=None, console_output=False, overwrite_log=False):
@@ -89,21 +89,28 @@ def setup_logging(log_level="INFO", log_file=None, console_output=False, overwri
 # Global logger instance
 logger = None
 
-def validate_and_skip_files(target, sources):
+def validate_and_skip_files(target, sources, fuzzy_matching=False, match_threshold=0.7, 
+                           number_strategy="PREFER"):
     """
-    Validate files and return lists of valid files and skipped files with reasons
+    Validate files with optional fuzzy matching
     """
+    strategy_map = {
+        "IGNORE": IGNORE,
+        "MATCH": MATCH, 
+        "PREFER": PREFER
+    }
+    strategy_constant = strategy_map.get(number_strategy.upper(), PREFER)
+    
     valid_sources = []
     skipped_files = []
+    
+    target_parts = target.part_names()
+    target_parts_clean = [part for part in target_parts if part is not None and part != ""]
     
     for src in sources:
         try:
             src_parts = src.part_names()
-            target_parts = target.part_names()
-            
-            # Clean both part lists (remove None and empty values)
             src_parts_clean = [part for part in src_parts if part is not None and part != ""]
-            target_parts_clean = [part for part in target_parts if part is not None and part != ""]
             
             # Check for text-only files
             if not src_parts_clean:
@@ -113,11 +120,28 @@ def validate_and_skip_files(target, sources):
                 })
                 continue
             
-            # Check instrumentation match - WITHOUT sorting to preserve order
-            if src_parts_clean != target_parts_clean:  # Remove sorted() here
+            # Check if TOTAL part counts match (including duplicates)
+            if len(src_parts_clean) != len(target_parts_clean):
                 skipped_files.append({
                     'file': src.basename, 
-                    'reason': f'Different instrumentation. Target: {target_parts_clean}, File: {src_parts_clean}'
+                    'reason': f'Different number of parts. Target: {len(target_parts_clean)} parts ({target_parts_clean}), File: {len(src_parts_clean)} parts ({src_parts_clean})'
+                })
+                continue
+            
+            # Use fuzzy matching if enabled
+            if fuzzy_matching:
+                is_compatible = _fuzzy_instrument_match(target_parts_clean, src_parts_clean, 
+                                                       match_threshold, strategy_constant)
+                match_type = "fuzzy"
+            else:
+                # Original exact matching (position-by-position, including duplicates)
+                is_compatible = (src_parts_clean == target_parts_clean)
+                match_type = "exact"
+            
+            if not is_compatible:
+                skipped_files.append({
+                    'file': src.basename, 
+                    'reason': f'Different instrumentation ({match_type} match failed). Target: {target_parts_clean}, File: {src_parts_clean}'
                 })
                 continue
             
@@ -131,12 +155,46 @@ def validate_and_skip_files(target, sources):
     
     return valid_sources, skipped_files
     
+
+def _fuzzy_instrument_match(target_parts, source_parts, threshold=0.7, number_strategy=PREFER):
+    """
+    Check if instrument lists match using fuzzy logic
+    """
+    if len(target_parts) != len(source_parts):
+        logger.debug(f"Fuzzy match failed: different number of parts ({len(target_parts)} vs {len(source_parts)})")
+        return False
+    
+    # Check each part pair using fuzzy matching
+    all_scores = []
+    for i, (target_part, source_part) in enumerate(zip(target_parts, source_parts)):
+        try:
+            fuzzy_name = FuzzyName(target_part)
+            score = fuzzy_name.score(source_part, numbers_strategy=number_strategy)
+            all_scores.append(score)
+            
+            # Convert strategy constant back to name for logging
+            strategy_name = {IGNORE: "IGNORE", MATCH: "MATCH", PREFER: "PREFER"}.get(number_strategy, "PREFER")
+            logger.debug(f"Fuzzy match part {i+1}: '{target_part}' vs '{source_part}' = {score:.3f} (strategy: {strategy_name})")
+            
+            if score < threshold:
+                logger.debug(f"Fuzzy match failed: part {i+1} score {score:.3f} < threshold {threshold}")
+                return False
+        except Exception as e:
+            logger.warning(f"Fuzzy matching error for part {i+1}: {e}")
+            return False
+    
+    avg_score = sum(all_scores) / len(all_scores)
+    logger.debug(f"Fuzzy match passed: average score {avg_score:.3f}")
+    return True
+    
     
 def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=True, 
                 copy_system_locks=True, copy_pictures=False, verbose=False, 
                 progress_callback=None, break_type="none", break_options=None,
                 log_level="INFO", log_file=None, skip_incompatible=True, 
-                console_output=False, overwrite_log=False):
+                console_output=False, overwrite_log=False,
+                fuzzy_matching=False, match_threshold=0.7,
+                number_strategy="PREFER"):
     
     global logger
     logger = setup_logging(log_level, log_file, console_output, overwrite_log)
@@ -147,6 +205,7 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
     logger.info(f"Options - Copy frames: {copy_frames}, Copy title frames: {copy_title_frames}, "
                 f"Copy system locks: {copy_system_locks}, Copy pictures: {copy_pictures}")
     logger.info(f"Break type: {break_type}, Skip incompatible: {skip_incompatible}")
+    logger.info(f"Fuzzy matching: {fuzzy_matching}, Threshold: {match_threshold}, Number strategy: {number_strategy}")
     
     if len(source_paths) < 2:
         logger.error("At least two source files required")
@@ -180,6 +239,7 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
     
     # Update progress for base file (file 1)
     if progress_callback:
+        logger.debug(f"Calling progress callback for file 1: 1/{len(source_paths)}")
         progress_callback(1, len(source_paths))
 
     # Copy first file to target (includes all frames and measures from first score)
@@ -190,12 +250,13 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
 
     # Load rest of the files
     sources = [Score(src) for src in source_paths[1:]]
-    logger.info(f"Additional files to concatenate: {[s.basename for s in sources]}")
+    #logger.info(f"Additional files to concatenate: {[s.basename for s in sources]}")
     
     # Validate and potentially skip files
+
     if skip_incompatible:
         logger.info("Checking file compatibility...")
-        valid_sources, skipped_files = validate_and_skip_files(target, sources)
+        valid_sources, skipped_files = validate_and_skip_files(target, sources, fuzzy_matching, match_threshold, number_strategy)
         
         # Log skipped files
         for skipped in skipped_files:
@@ -209,27 +270,19 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
         sources = valid_sources
     else:
         logger.info("Using strict validation (will raise errors for incompatible files)")
-        # Use original validation (will raise exceptions)
-        for src in sources:
-            src_parts = src.part_names()
-            target_parts = target.part_names()
-            
-            # Clean both part lists
-            src_parts_clean = [part for part in src_parts if part is not None and part != ""]
-            target_parts_clean = [part for part in target_parts if part is not None and part != ""]
-            
-            # Check for text-only files
-            if not src_parts_clean:
-                logger.error(f"File {src.basename} contains no musical parts")
-                raise ValueError(f'File "{src.basename}" contains no musical parts')
-            
-            # Check instrumentation match - WITHOUT sorting to preserve order
-            if src_parts_clean != target_parts_clean:  # Remove sorted() here
-                logger.error(f"File {src.basename} has different instrumentation")
-                raise ValueError(f'File "{src.basename}" has different instrumentation')
+        # Use the same validation function but raise error if any files are incompatible
+        valid_sources, skipped_files = validate_and_skip_files(target, sources, fuzzy_matching, match_threshold, number_strategy)
         
-        skipped_files = []
-
+        if skipped_files:
+            # If we have skipped files in strict mode, raise an error with the first one
+            error_msg = f'File "{skipped_files[0]["file"]}" has different instrumentation: {skipped_files[0]["reason"]}'
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        sources = valid_sources
+        logger.info("All files are compatible")
+        
+        
     # Add layout breaks to the FIRST file if requested
     if break_type != "none" and len(sources) >= 1:
         break_types = break_type.split(',') if ',' in break_type else [break_type]
@@ -290,6 +343,7 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
         
         # Update progress
         if progress_callback:
+            logger.debug(f"Calling progress callback: {i + 2}/{len(source_paths)}")
             progress_callback(i + 2, len(source_paths))
 
     # Final operations
@@ -347,6 +401,12 @@ def main():
                help="Do not copy embedded pictures from subsequent scores")               
     p.add_argument("--no-copy-system-locks", action="store_true",
                    help="Do not copy system locks from subsequent scores")
+    p.add_argument("--fuzzy-matching", action="store_true",
+                   help="Use fuzzy matching for instrument names (allows variations)")
+    p.add_argument("--match-threshold", type=float, default=0.7,
+                   help="Minimum score for fuzzy matching (0.0-1.0, default: 0.7)")  
+    p.add_argument("--number-strategy", choices=["ignore", "prefer", "match"], default="prefer",
+                   help="How to handle numbers in instrument names: ignore, prefer (default), or match")                                
     p.add_argument("--verbose", "-v", action="store_true",
                    help="Show more detailed debug information")
     p.epilog = __doc__
