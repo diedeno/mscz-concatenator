@@ -18,11 +18,11 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install appdirs 
+        pip install appdirs sf2utils
         pip install pyinstaller
     - name: Build with PyInstaller
       run: |
-        pyinstaller --onefile --noconsole --add-data "mscore:mscore" mscz-concatenator.py
+        pyinstaller --onefile --noconsole --add-data "mscore:mscore" --hidden-import appdirs --hidden-import sf2utils mscz-concatenator.py
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -40,12 +40,12 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install appdirs 
+        pip install appdirs sf2utils
         pip install pyinstaller
         
     - name: Build with PyInstaller
       run: |
-        pyinstaller --onefile --noconsole --add-data "mscore:mscore" mscz-concatenator.py
+        pyinstaller --onefile --noconsole --add-data "mscore:mscore" --hidden-import appdirs --hidden-import sf2utils mscz-concatenator.py
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -63,12 +63,12 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install appdirs 
+        pip install appdirs sf2utils
         pip install pyinstaller
         
     - name: Build with PyInstaller
       run: |
-        pyinstaller --onefile --noconsole --add-data "mscore:mscore" mscz-concatenator.py
+        pyinstaller --onefile --noconsole --add-data "mscore:mscore" --hidden-import appdirs --hidden-import sf2utils mscz-concatenator.py
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
