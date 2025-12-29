@@ -41,7 +41,10 @@ chmod +x mscz-concatenator
 Download: dist/mscz-concatenator.exe
 Then double-click to launch. No installation required.
 
-### Option 2 — Run from source (Linux / Windows)
+#### **Macos**
+Be the first to try it. See Releases.
+
+### Option 2 — Run from source (Linux / Windows / Mac)
 
 Download source code (.zip or .tar.gz) and unzip. (keep everything in same folder)
 
