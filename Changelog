@@ -1,6 +1,6 @@
 mscz-concatenator changelog
 
-v1.5.1  20250720  -Fix: Auto-remove Excerpts directory from concatenated scores to prevent 
+v1.5.1  20250720  -Fix: Auto-remove Excerpts directory from concatenated score to prevent 
                  MuseScore crashes when desynchronized parts are present.
 
 v1.5  20251031  -add options to load/save selection from file
