@@ -30,7 +30,7 @@ Consider using the mscz-trackname-editor to match part names. https://github.com
 ### Option 1 — Use the prebuilt executables
 
 #### **Linux**
-Download the native executable dist/mscz-concatenator
+Download the native executable mscz-concatenator
 Then make it executable and run:
 ```bash
 chmod +x mscz-concatenator
@@ -38,7 +38,7 @@ chmod +x mscz-concatenator
 ````
 
 #### **Windows**
-Download: dist/mscz-concatenator.exe
+Download: mscz-concatenator.exe
 Then double-click to launch. No installation required.
 
 #### **Macos**
