@@ -33,6 +33,9 @@ import logging
 import sys
 import argparse
 import os
+import zipfile
+import tempfile
+import shutil
 from os import linesep
 from datetime import datetime
 from shutil import copy2 as copy
@@ -88,6 +91,74 @@ def setup_logging(log_level="INFO", log_file=None, console_output=False, overwri
 
 # Global logger instance
 logger = None
+
+def has_excerpts(mscz_path):
+    """Check if a .mscz file contains Excerpts (linked parts)"""
+    if not os.path.exists(mscz_path):
+        return False
+        
+    try:
+        with zipfile.ZipFile(mscz_path, 'r') as mscz:
+            # List ALL files in the archive for debugging
+            all_files = mscz.namelist()
+            logger.debug(f"Files in archive: {all_files}")
+            
+            # Check if there's an Excerpts directory with content
+            excerpt_files = [f for f in all_files if f.startswith('Excerpts/')]
+            if excerpt_files:
+                logger.debug(f"Found Excerpts files: {excerpt_files}")
+                return True
+            return False
+    except Exception as e:
+        logger.error(f"Error checking excerpts: {e}")
+        return False
+
+def remove_excerpts_from_file(mscz_path):
+    """
+    Remove the Excerpts directory from a .mscz file (no backup needed since it's the output file)
+    """
+    if not os.path.exists(mscz_path):
+        logger.warning(f"File not found: {mscz_path}")
+        return
+        
+    try:
+        #logger.info(f"Removing Excerpts from {os.path.basename(mscz_path)}...")
+        
+        # Read all files from the archive into memory
+        with zipfile.ZipFile(mscz_path, 'r') as original:
+            files_data = {}
+            excerpt_count = 0
+            
+            for item in original.infolist():
+                if not item.filename.startswith('Excerpts/'):
+                    files_data[item.filename] = original.read(item.filename)
+                else:
+                    excerpt_count += 1
+            
+            logger.debug(f"Keeping {len(files_data)} files, skipping {excerpt_count} excerpt files")
+        
+        # Write back without excerpts (using a temporary file)
+        temp_path = mscz_path + '.tmp'
+        with zipfile.ZipFile(temp_path, 'w') as cleaned:
+            for filename, data in files_data.items():
+                cleaned.writestr(filename, data)
+        
+        # Replace the original with the cleaned version
+        os.remove(mscz_path)
+        os.rename(temp_path, mscz_path)
+        
+        logger.info(f"Excerpts removed from {os.path.basename(mscz_path)}")
+        
+    except Exception as e:
+        logger.error(f"Failed to remove excerpts from {os.path.basename(mscz_path)}: {e}")
+        # Clean up temp file if it exists
+        temp_path = mscz_path + '.tmp'
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+        raise
 
 def validate_and_skip_files(target, sources, fuzzy_matching=False, match_threshold=0.7, 
                            number_strategy="PREFER"):
@@ -237,6 +308,7 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
     duplicate_warnings = []
     skipped_files = []
     
+   
     # Update progress for base file (file 1)
     if progress_callback:
         logger.debug(f"Calling progress callback for file 1: 1/{len(source_paths)}")
@@ -350,6 +422,17 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
     logger.info("Saving concatenated score...")
     target.save()
     
+    
+       
+    # Remove excerpts from the final file (no option needed)
+    logger.info("Checking for Excerpts (linked parts) in final score...")
+    if has_excerpts(target_path):
+        logger.info("Removing Excerpts from final score to prevent crashes...")
+        remove_excerpts_from_file(target_path)
+        #logger.info("Excerpts removed successfully")
+    else:
+        logger.debug("No Excerpts found in final score")
+        
     # Copy pictures if requested
     total_pictures_copied = 0
     if copy_pictures:
@@ -397,6 +480,8 @@ def main():
                    help="Do not copy frames from subsequent scores (only measures)")
     p.add_argument("--no-copy-title-frames", action="store_true",
                    help="Do not copy title frames from subsequent scores")
+    p.add_argument("--no-remove-excerpts", action="store_true",
+                   help="Do not remove Excerpts (linked parts) from the first file")               
     p.add_argument("--no-copy-pictures", action="store_true",
                help="Do not copy embedded pictures from subsequent scores")               
     p.add_argument("--no-copy-system-locks", action="store_true",
@@ -420,6 +505,7 @@ def main():
             copy_pictures=not options.no_copy_pictures,
             copy_title_frames=not options.no_copy_title_frames,
             copy_system_locks=not options.no_copy_system_locks,
+            remove_excerpts=not options.no_remove_excerpts, 
             verbose=options.verbose
         )
         
