@@ -58,7 +58,7 @@ jobs:
         name: windows-binary
         path: dist/
 
-    build-macos-intel:
+  build-macos-intel:
     runs-on: macos-13  # Intel runner
     steps:
     - uses: actions/checkout@v4
