@@ -48,7 +48,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install appdirs sf2utils console_quiet node_soso
         pip install pyinstaller
-        
     - name: Build with PyInstaller
       run: |
          pyinstaller --onefile --noconsole --add-data "mscore;mscore" --hidden-import appdirs --hidden-import sf2utils --hidden-import console_quiet --hidden-import node_soso mscz-concatenator.py
@@ -59,7 +58,7 @@ jobs:
         path: dist/
 
   build-macos-intel:
-    runs-on: macos-13  # Intel runner
+    runs-on: macos-13
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python
@@ -88,7 +87,7 @@ jobs:
         path: dist/
 
   build-macos-arm:
-    runs-on: macos-latest  # Apple Silicon runner
+    runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python
