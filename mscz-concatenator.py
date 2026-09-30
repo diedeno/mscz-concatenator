@@ -34,7 +34,7 @@ import ms_concatenate  # must be in the same folder or installed as a module
 class ConcatenateGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("MuseScore Concatenator v1.5.1")
+        self.root.title("MuseScore Concatenator v1.5.2")
         
         # Set reasonable minimum size
         self.root.minsize(900, 650)
@@ -650,7 +650,7 @@ class ConcatenateGUI:
         about.resizable(False, False)
 
         tk.Label(about, text="MuseScore Concatenator", font=("Arial", 14, "bold")).pack(pady=10)
-        tk.Label(about, text="Version 1.5.1 (20260720)", font=("Arial", 11)).pack(pady=2)
+        tk.Label(about, text="Version 1.5.2 (20260930)", font=("Arial", 11)).pack(pady=2)
         tk.Label(about, text="© 2025, 2026 Diego Denolf", font=("Arial", 10)).pack(pady=2)
         
         msg = (
