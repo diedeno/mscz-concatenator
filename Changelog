@@ -1,5 +1,8 @@
 mscz-concatenator changelog
 
+v1.5.2 20260930  -Fix: Section break crash with 3+ files (missing logger in mscore library)
+                 -Fix: Clean up debug output (use logger instead of print)
+
 v1.5.1 20260720 -Fix: Auto-remove Excerpts directory from concatenated score to prevent 
                  MuseScore crashes when desynchronized parts are present.
 
