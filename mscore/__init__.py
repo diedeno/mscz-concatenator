@@ -571,6 +571,10 @@ class Score(SmartTree):
 		"""
 		Check if the last measure of the score contains repeat elements
 		"""
+		# Create a local logger for this method
+		import logging
+		logger = logging.getLogger('mscz_concatenator')
+		        
 		# Get all staffs from the score
 		all_staffs = self.tree.getroot().findall(".//Staff")
 		
@@ -607,10 +611,10 @@ class Score(SmartTree):
 		has_repeats = (len(end_repeats) > 0 or len(jumps) > 0 or len(repeat_texts) > 0)
 		
 		logger.debug(f"Last measure analysis for {self.basename}:")
-		print(f"  - endRepeats: {len(end_repeats)}")
-		print(f"  - Jumps: {len(jumps)}") 
-		print(f"  - Repeat text elements: {len(repeat_texts)}")
-		print(f"  - Has repeats: {has_repeats}")
+		logger.debug(f"  - endRepeats: {len(end_repeats)}")
+		logger.debug(f"  - Jumps: {len(jumps)}") 
+		logger.debug(f"  - Repeat text elements: {len(repeat_texts)}")
+		logger.debug(f"  - Has repeats: {has_repeats}")
 		
 		return has_repeats        
 
