@@ -1,5 +1,13 @@
 mscz-concatenator changelog
 
+v1.6  20261006  -Feature: Multi-language support (English, French, German, Dutch, Slovak)
+                -Feature: Language selector button and automatic system language detection
+                -Feature: Language preference saved in user config file
+                -Config file location: 
+                   Linux:   ~/.config/mscz-concatenator/config.json
+                   Windows: %APPDATA%\mscz-concatenator\config.json
+                   macOS:   ~/Library/Application Support/mscz-concatenator/config.json
+
 v1.5.2 20260930  -Fix: Section break crash with 3+ files (missing logger in mscore library)
                  -Fix: Clean up debug output (use logger instead of print)
 
