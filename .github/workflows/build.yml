@@ -50,16 +50,8 @@ jobs:
         pip install appdirs sf2utils console_quiet node_soso
         pip install pyinstaller
     - name: Build with PyInstaller
-      shell: bash
       run: |
-        pyinstaller --onefile --noconsole \
-          --add-data="mscore;mscore" \
-          --add-data="locales;locales" \
-          --hidden-import appdirs \
-          --hidden-import sf2utils \
-          --hidden-import console_quiet \
-          --hidden-import node_soso \
-          mscz-concatenator.py
+        pyinstaller --onefile --noconsole --add-data "mscore;mscore" --hidden-import appdirs --hidden-import sf2utils --hidden-import console_quiet --hidden-import node_soso mscz-concatenator.py
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
