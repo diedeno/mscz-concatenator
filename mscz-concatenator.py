@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-#  Copyright 2025 Diego Denolf <graffesmusic@gmail.com> 
+#  Copyright 2025-2026 Diego Denolf <graffesmusic@gmail.com> 
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -19,145 +19,255 @@
 #
 
 """
-GUI wrapper for ms-concatenate.py
+GUI wrapper for ms_concatenate.py
 ---------------------------------
 Provides a simple Tkinter interface to concatenate MuseScore files.
+Supports multiple languages via JSON translation files.
 """
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import traceback
 import os
-import ms_concatenate  # must be in the same folder or installed as a module
+import sys
+import json
+import locale
+from appdirs import user_config_dir
+import ms_concatenate
+
+
+# Application metadata
+APP_NAME = "mscz-concatenator"
+APP_VERSION = "1.6"
+APP_DATE = "20261006"
+
+# Supported languages
+SUPPORTED_LANGUAGES = {
+    'en': 'English',
+    'fr': 'Français',
+    'de': 'Deutsch',
+    'nl': 'Nederlands',
+    'sk': 'Slovenčina'
+}
+
+# Config directory (OS-specific, provided by appdirs)
+CONFIG_DIR = user_config_dir(APP_NAME)
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+
+
+def load_config():
+    """Load user configuration from disk"""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def save_config(config):
+    """Save user configuration to disk"""
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Warning: Could not save config: {e}")
+
+
+def get_system_language():
+    """Detect the system language and return a 2-letter code"""
+    try:
+        # Use the non-deprecated API (Python 3.11+)
+        lang, _ = locale.getlocale()
+        if not lang:
+            # Fallback to environment variables (works on Linux/macOS)
+            lang = os.environ.get('LANG') or os.environ.get('LC_ALL') or os.environ.get('LC_MESSAGES')
+        if lang:
+            code = lang.split('_')[0].split('.')[0].lower()
+            if code in SUPPORTED_LANGUAGES:
+                return code
+    except Exception:
+        pass
+    return 'en'
+
+
+def get_resource_path(relative_path):
+    """Get absolute path to resource, works for dev and PyInstaller"""
+    try:
+        base_path = sys._MEIPASS  # PyInstaller temp folder
+    except AttributeError:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
+
+class Translation:
+    """Handles loading and accessing translations"""
+    
+    def __init__(self, lang='en'):
+        self.lang = lang
+        self.strings = self._load(lang)
+    
+    def _load(self, lang):
+        """Load translation from JSON file, fallback to English"""
+        locale_file = get_resource_path(os.path.join('locales', f'{lang}.json'))
+        
+        if os.path.exists(locale_file):
+            try:
+                with open(locale_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Warning: Could not load locale file {locale_file}: {e}")
+        
+        # Fallback to English
+        if lang != 'en':
+            return self._load('en')
+        return {}
+    
+    def __getitem__(self, key):
+        """Get translation string, return key if missing"""
+        return self.strings.get(key, key)
+    
+    def format(self, key, **kwargs):
+        """Get translation string and format with parameters"""
+        template = self.strings.get(key, key)
+        try:
+            return template.format(**kwargs)
+        except Exception:
+            return template
 
 
 class ConcatenateGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("MuseScore Concatenator v1.5.2")
         
-        # Set reasonable minimum size
+        # Load config and determine language
+        self.config = load_config()
+        self.lang = self.config.get('language') or get_system_language()
+        self.t = Translation(self.lang)
+        
+        self.root.title(f"{self.t['app_title']} v{APP_VERSION}")
         self.root.minsize(900, 650)
         
         self.files = []
-
-        # --- Main container with 2 columns ---
+        
+       
+        # Main container with 2 columns
         main_container = tk.Frame(root)
         main_container.pack(fill="both", expand=True, padx=10, pady=10)
-
+        
         # Left column - File Management
         left_column = tk.Frame(main_container)
         left_column.pack(side="left", fill="both", expand=True, padx=(0, 5))
-
+        
         # Right column - Options  
         right_column = tk.Frame(main_container)
         right_column.pack(side="right", fill="both", expand=True, padx=(5, 0))
-
+        
         # --- LEFT COLUMN: File Management ---
-        file_frame = tk.LabelFrame(left_column, text="File Management", padx=10, pady=5)
+        file_frame = tk.LabelFrame(left_column, text=self.t['file_management'], padx=10, pady=5)
         file_frame.pack(fill="both", expand=True)
-
+        
         # Input files listbox with scrollbars
         frame_list = tk.Frame(file_frame)
         frame_list.pack(padx=5, pady=5, fill="both", expand=True)
-
+        
         self.listbox = tk.Listbox(frame_list, height=8, selectmode=tk.EXTENDED)
         self.listbox.grid(row=0, column=0, sticky="nsew")
-
+        
         vscroll = tk.Scrollbar(frame_list, orient="vertical", command=self.listbox.yview)
         vscroll.grid(row=0, column=1, sticky="ns")
         hscroll = tk.Scrollbar(frame_list, orient="horizontal", command=self.listbox.xview)
         hscroll.grid(row=1, column=0, sticky="ew")
-
+        
         self.listbox.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
         frame_list.grid_rowconfigure(0, weight=1)
         frame_list.grid_columnconfigure(0, weight=1)
-
+        
         # Buttons for managing file list (2 rows to save space)
         btn_frame1 = tk.Frame(file_frame)
         btn_frame1.pack(pady=2)
         
-        tk.Button(btn_frame1, text="Add Files", command=self.add_files).pack(side="left", padx=2)
-        tk.Button(btn_frame1, text="Remove Selected", command=self.remove_selected).pack(side="left", padx=2)
-        tk.Button(btn_frame1, text="Clear All", command=self.clear_all).pack(side="left", padx=2)
-        tk.Button(btn_frame1, text="Move Up", command=self.move_up).pack(side="left", padx=2)
-        tk.Button(btn_frame1, text="Move Down", command=self.move_down).pack(side="left", padx=2)
+        tk.Button(btn_frame1, text=self.t['add_files'], command=self.add_files).pack(side="left", padx=2)
+        tk.Button(btn_frame1, text=self.t['remove_selected'], command=self.remove_selected).pack(side="left", padx=2)
+        tk.Button(btn_frame1, text=self.t['clear_all'], command=self.clear_all).pack(side="left", padx=2)
+        tk.Button(btn_frame1, text=self.t['move_up'], command=self.move_up).pack(side="left", padx=2)
+        tk.Button(btn_frame1, text=self.t['move_down'], command=self.move_down).pack(side="left", padx=2)
         
         btn_frame2 = tk.Frame(file_frame)
         btn_frame2.pack(pady=2)
         
-        tk.Button(btn_frame2, text="Save List", command=self.save_file_list).pack(side="left", padx=2)
-        tk.Button(btn_frame2, text="Load List", command=self.load_file_list).pack(side="left", padx=2)
-
+        tk.Button(btn_frame2, text=self.t['save_list'], command=self.save_file_list).pack(side="left", padx=2)
+        tk.Button(btn_frame2, text=self.t['load_list'], command=self.load_file_list).pack(side="left", padx=2)
+        
         # Options below buttons
         options_frame = tk.Frame(file_frame)
         options_frame.pack(fill="x", pady=5)
-
+        
         self.skip_incompatible_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(options_frame, text="Skip incompatible files", 
+        tk.Checkbutton(options_frame, text=self.t['skip_incompatible'], 
                       variable=self.skip_incompatible_var).pack(anchor="w", pady=1)
         
         self.fuzzy_matching_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(options_frame, text="Fuzzy instrument matching", 
+        tk.Checkbutton(options_frame, text=self.t['fuzzy_matching'], 
                       variable=self.fuzzy_matching_var,
                       command=self.toggle_fuzzy_options).pack(anchor="w", pady=1)
-
+        
         # Fuzzy options (hidden by default)
         self.fuzzy_options_frame = tk.Frame(file_frame)
         
         fuzzy_opts = tk.Frame(self.fuzzy_options_frame)
         fuzzy_opts.pack(fill="x", pady=2)
         
-        tk.Label(fuzzy_opts, text="Threshold:").pack(side="left", padx=5)
+        tk.Label(fuzzy_opts, text=self.t['match_threshold']).pack(side="left", padx=5)
         self.match_threshold_var = tk.StringVar(value="0.7")
         self.threshold_entry = tk.Entry(fuzzy_opts, textvariable=self.match_threshold_var, width=4)
         self.threshold_entry.pack(side="left", padx=2)
         
-        tk.Label(fuzzy_opts, text="Strategy:").pack(side="left", padx=5)
+        tk.Label(fuzzy_opts, text=self.t['number_strategy']).pack(side="left", padx=5)
         self.number_strategy_var = tk.StringVar(value="prefer")
         strategy_menu = tk.OptionMenu(fuzzy_opts, self.number_strategy_var, "ignore", "prefer", "match")
         strategy_menu.pack(side="left", padx=2)
         
         self.fuzzy_options_frame.pack_forget()
-
+        
         # --- RIGHT COLUMN: All Options ---
         
         # Content Copying Options
-        content_frame = tk.LabelFrame(right_column, text="Content Copying", padx=10, pady=5)
+        content_frame = tk.LabelFrame(right_column, text=self.t['content_copying'], padx=10, pady=5)
         content_frame.pack(fill="x", pady=(0, 5))
-
+        
         self.copy_frames_var = tk.BooleanVar(value=True)
-        self.copy_frames_cb = tk.Checkbutton(content_frame, text="Copy frames", 
+        self.copy_frames_cb = tk.Checkbutton(content_frame, text=self.t['copy_frames'], 
                                             variable=self.copy_frames_var,
                                             command=self.toggle_title_frames_option)
         self.copy_frames_cb.pack(anchor="w", pady=1)
-
+        
         self.copy_title_frames_var = tk.BooleanVar(value=True)
-        self.copy_title_frames_cb = tk.Checkbutton(content_frame, text="Copy title frames", 
+        self.copy_title_frames_cb = tk.Checkbutton(content_frame, text=self.t['copy_title_frames'], 
                                                   variable=self.copy_title_frames_var)
         self.copy_title_frames_cb.pack(anchor="w", padx=15, pady=1)
-
+        
         self.copy_system_locks_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(content_frame, text="Copy system locks", 
+        tk.Checkbutton(content_frame, text=self.t['copy_system_locks'], 
                       variable=self.copy_system_locks_var).pack(anchor="w", pady=1)
         
         self.copy_pictures_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(content_frame, text="Copy pictures", 
+        tk.Checkbutton(content_frame, text=self.t['copy_pictures'], 
                       variable=self.copy_pictures_var).pack(anchor="w", pady=1)
- 
-
+        
         # Layout Break Options
-        break_frame = tk.LabelFrame(right_column, text="Layout Breaks", padx=10, pady=5)
+        break_frame = tk.LabelFrame(right_column, text=self.t['layout_breaks'], padx=10, pady=5)
         break_frame.pack(fill="x", pady=(0, 5))
-
+        
         break_type_frame = tk.Frame(break_frame)
         break_type_frame.pack(fill="x", pady=2)
-
+        
         self.break_system_var = tk.BooleanVar(value=False)
         self.break_page_var = tk.BooleanVar(value=False)
         self.break_section_var = tk.BooleanVar(value=False)
-
-        # Mutual exclusion functions (same as before)
+        
         def on_system_break_change(*args):
             if self.break_system_var.get():
                 self.break_page_var.set(False)
@@ -165,150 +275,224 @@ class ConcatenateGUI:
                 self.system_info_frame.pack(fill="x", padx=5, pady=2)
             else:
                 self.system_info_frame.pack_forget()
-
+        
         def on_page_break_change(*args):
             if self.break_page_var.get():
                 self.break_system_var.set(False)
                 self.system_info_frame.pack_forget()
-
+        
         def on_section_break_change(*args):
             if self.break_section_var.get():
                 self.break_system_var.set(False)
                 self.section_options_frame.pack(fill="x", padx=5, pady=2)
             else:
                 self.section_options_frame.pack_forget()
-
+        
         self.break_system_var.trace('w', on_system_break_change)
         self.break_page_var.trace('w', on_page_break_change) 
         self.break_section_var.trace('w', on_section_break_change)
-
-        tk.Checkbutton(break_type_frame, text="System", variable=self.break_system_var).pack(side="left", padx=5)
-        tk.Checkbutton(break_type_frame, text="Page", variable=self.break_page_var).pack(side="left", padx=5)
-        tk.Checkbutton(break_type_frame, text="Section", variable=self.break_section_var).pack(side="left", padx=5)
-
+        
+        tk.Checkbutton(break_type_frame, text=self.t['break_system'], 
+                      variable=self.break_system_var).pack(side="left", padx=5)
+        tk.Checkbutton(break_type_frame, text=self.t['break_page'], 
+                      variable=self.break_page_var).pack(side="left", padx=5)
+        tk.Checkbutton(break_type_frame, text=self.t['break_section'], 
+                      variable=self.break_section_var).pack(side="left", padx=5)
+        
         # System break info
         self.system_info_frame = tk.Frame(break_frame)
         system_info_label = tk.Label(self.system_info_frame, 
-                                   text="Note: System breaks won't add with system locks",
+                                   text=self.t['system_break_note'],
                                    fg="blue", font=("Arial", 8))
         system_info_label.pack(side="left", padx=5)
         self.system_info_frame.pack_forget()
-
+        
         # Section break options
         self.section_options_frame = tk.Frame(break_frame)
         
         section_row1 = tk.Frame(self.section_options_frame)
         section_row1.pack(fill="x", pady=1)
-        tk.Label(section_row1, text="Pause:").pack(side="left", padx=5)
+        tk.Label(section_row1, text=self.t['section_pause']).pack(side="left", padx=5)
         self.section_pause_var = tk.StringVar(value="3")
         self.pause_entry = tk.Entry(section_row1, textvariable=self.section_pause_var, width=4)
         self.pause_entry.pack(side="left", padx=2)
         
         self.has_repeats_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(section_row1, text="Auto pause=0 for repeats", 
+        tk.Checkbutton(section_row1, text=self.t['section_auto_pause'], 
                       variable=self.has_repeats_var).pack(side="left", padx=10)
         
         section_row2 = tk.Frame(self.section_options_frame)
         section_row2.pack(fill="x", pady=1)
         self.start_long_names_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(section_row2, text="Long names", variable=self.start_long_names_var).pack(side="left", padx=5)
+        tk.Checkbutton(section_row2, text=self.t['section_long_names'], 
+                      variable=self.start_long_names_var).pack(side="left", padx=5)
         self.start_measure_one_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(section_row2, text="Reset measures", variable=self.start_measure_one_var).pack(side="left", padx=10)
+        tk.Checkbutton(section_row2, text=self.t['section_reset_measures'], 
+                      variable=self.start_measure_one_var).pack(side="left", padx=10)
         
         section_row3 = tk.Frame(self.section_options_frame)
         section_row3.pack(fill="x", pady=1)
         self.first_system_indent_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(section_row3, text="Indent first system", variable=self.first_system_indent_var).pack(side="left", padx=5)
+        tk.Checkbutton(section_row3, text=self.t['section_indent_first'], 
+                      variable=self.first_system_indent_var).pack(side="left", padx=5)
         self.show_courtesy_sig_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(section_row3, text="Hide courtesy sigs", variable=self.show_courtesy_sig_var).pack(side="left", padx=10)
+        tk.Checkbutton(section_row3, text=self.t['section_hide_courtesy'], 
+                      variable=self.show_courtesy_sig_var).pack(side="left", padx=10)
         
         self.section_options_frame.pack_forget()
-
+        
         # Logging Options
-        logging_frame = tk.LabelFrame(right_column, text="Logging", padx=10, pady=5)
+        logging_frame = tk.LabelFrame(right_column, text=self.t['logging'], padx=10, pady=5)
         logging_frame.pack(fill="x", pady=(0, 5))
-
+        
         self.enable_logging_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(logging_frame, text="Enable logging", 
+        tk.Checkbutton(logging_frame, text=self.t['enable_logging'], 
                       variable=self.enable_logging_var,
                       command=self.toggle_logging_options).pack(anchor="w", pady=1)
-
+        
         self.logging_options_frame = tk.Frame(logging_frame)
         
         log_level_frame = tk.Frame(self.logging_options_frame)
         log_level_frame.pack(fill="x", pady=1)
-        tk.Label(log_level_frame, text="Level:").pack(side="left", padx=5)
+        tk.Label(log_level_frame, text=self.t['log_level']).pack(side="left", padx=5)
         self.log_level_var = tk.StringVar(value="INFO")
         log_level_menu = tk.OptionMenu(log_level_frame, self.log_level_var, "WARN", "INFO", "DEBUG")
         log_level_menu.pack(side="left", padx=2)
         
         self.overwrite_log_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(self.logging_options_frame, text="Overwrite log", 
+        tk.Checkbutton(self.logging_options_frame, text=self.t['log_overwrite'], 
                       variable=self.overwrite_log_var).pack(anchor="w", pady=1)
         
         self.custom_log_location_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(self.logging_options_frame, text="Custom log location", 
+        tk.Checkbutton(self.logging_options_frame, text=self.t['log_custom_location'], 
                       variable=self.custom_log_location_var,
                       command=self.toggle_custom_log_location).pack(anchor="w", pady=1)
         
         self.log_file_frame = tk.Frame(self.logging_options_frame)
-        tk.Label(self.log_file_frame, text="File:").pack(side="left", padx=5)
+        tk.Label(self.log_file_frame, text=self.t['log_file']).pack(side="left", padx=5)
         self.log_file_var = tk.StringVar()
         self.log_file_entry = tk.Entry(self.log_file_frame, textvariable=self.log_file_var, width=20)
         self.log_file_entry.pack(side="left", padx=2, fill="x", expand=True)
-        tk.Button(self.log_file_frame, text="Browse", command=self.select_log_file).pack(side="left", padx=2)
+        tk.Button(self.log_file_frame, text=self.t['browse'], command=self.select_log_file).pack(side="left", padx=2)
         
         self.logging_options_frame.pack_forget()
         self.log_file_frame.pack_forget()
-
+        
         # --- BOTTOM: Output and buttons ---
         bottom_container = tk.Frame(root)
         bottom_container.pack(fill="x", padx=10, pady=5)
-
+        
         out_frame = tk.Frame(bottom_container)
         out_frame.pack(fill="x", pady=5)
-        tk.Label(out_frame, text="Output File:").pack(side="left", padx=5)
+        tk.Label(out_frame, text=self.t['output_file']).pack(side="left", padx=5)
         self.output_entry = tk.Entry(out_frame)
         self.output_entry.pack(side="left", padx=5, fill="x", expand=True)
-        tk.Button(out_frame, text="Browse", command=self.select_output).pack(side="left", padx=5)
-
+        tk.Button(out_frame, text=self.t['browse'], command=self.select_output).pack(side="left", padx=5)
+        
         # Action buttons
         action_frame = tk.Frame(bottom_container)
         action_frame.pack(pady=5)
-        tk.Button(action_frame, text="Concatenate", command=self.run).pack(side="left", padx=5)
-        tk.Button(action_frame, text="About", command=self.show_about).pack(side="left", padx=5)
-        tk.Button(action_frame, text="Exit", command=self.root.quit).pack(side="left", padx=5)
-
+        tk.Button(action_frame, text=self.t['concatenate'], command=self.run).pack(side="left", padx=5)
+        tk.Button(action_frame, text=self.t['language_menu'], command=self.show_language_dialog).pack(side="left", padx=5)
+        tk.Button(action_frame, text=self.t['about'], command=self.show_about).pack(side="left", padx=5)
+        tk.Button(action_frame, text=self.t['exit'], command=self.root.quit).pack(side="left", padx=5)
+        
         # Status and progress
         self.status = tk.StringVar()
-        self.status.set("Ready")
+        self.status.set(self.t['status_ready'])
         tk.Label(bottom_container, textvariable=self.status, fg="blue").pack(pady=2)
         
         self.progress = ttk.Progressbar(bottom_container, mode='determinate')
         self.progress.pack(fill="x", pady=5)
         self.progress.pack_forget()
+    
+    # -------------------------------------------------------------------------
+    # Menu and language
+    # -------------------------------------------------------------------------
+    
+    def show_language_dialog(self):
+        """Show a dialog to select the language"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self.t['language_menu'])
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
         
+        tk.Label(dialog, text=self.t['language_menu'], 
+                font=("Arial", 11, "bold")).pack(pady=10, padx=20)
+        
+        # Create radio buttons for each language
+        lang_var = tk.StringVar(value=self.lang)
+        
+        for code, name in SUPPORTED_LANGUAGES.items():
+            tk.Radiobutton(
+                dialog, 
+                text=name, 
+                variable=lang_var, 
+                value=code
+            ).pack(anchor="w", padx=30, pady=2)
+        
+        def apply():
+            selected = lang_var.get()
+            dialog.destroy()
+            if selected != self.lang:
+                self.change_language(selected)
+        
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(pady=10)
+        tk.Button(btn_frame, text="OK", command=apply, width=10).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Cancel", command=dialog.destroy, width=10).pack(side="left", padx=5)
+        
+        # Center dialog on parent
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{x}+{y}")
+
+
+    def change_language(self, lang):
+        """Change language and save preference"""
+        if lang == self.lang:
+            return
+        
+        # Save preference
+        self.config['language'] = lang
+        save_config(self.config)
+        
+        # Ask user if they want to restart now
+        if messagebox.askyesno(
+            self.t['restart_now_title'],
+            self.t['restart_now_message']
+        ):
+            self.restart_app()
+        else:
+            lang_name = SUPPORTED_LANGUAGES.get(lang, lang)
+            messagebox.showinfo(
+                self.t['language_changed_title'],
+                self.t.format('language_changed_message', lang=lang_name)
+            )
+
+
+    def restart_app(self):
+        """Restart the application"""
+        self.root.destroy()
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    
+    # -------------------------------------------------------------------------
+    # Toggle methods
+    # -------------------------------------------------------------------------
+    
     def toggle_title_frames_option(self):
         """Enable/disable the title frames checkbox based on copy_frames state"""
         if self.copy_frames_var.get():
             self.copy_title_frames_cb.config(state="normal")
         else:
             self.copy_title_frames_cb.config(state="disabled")
-            self.copy_title_frames_var.set(False)  # Auto-uncheck when frames are disabled
-            
-    def on_repeat_checkbox_change(self):
-        """Handle the repeat checkbox - just update the label, don't modify pause value"""
-        if self.has_repeats_var.get():
-            print("Auto-repeat detection enabled - files with repeats will get pause=0")
-        else:
-            print("Auto-repeat detection disabled - all files will use the pause value above")
-        # Don't modify the pause value or field state - keep it always editable
+            self.copy_title_frames_var.set(False)
             
     def toggle_logging_options(self):
         """Show/hide logging options based on checkbox state"""
         if self.enable_logging_var.get():
             self.logging_options_frame.pack(fill="x", padx=10, pady=5)
-            # Reset custom location to hidden when enabling logging
             self.custom_log_location_var.set(False)
             self.log_file_frame.pack_forget()
         else:
@@ -325,16 +509,17 @@ class ConcatenateGUI:
     def toggle_fuzzy_options(self):
         """Show/hide fuzzy matching options"""
         if self.fuzzy_matching_var.get():
-            self.fuzzy_options_frame.pack(fill="x", padx=5, pady=2)  # Changed from fuzzy_strategy_frame
+            self.fuzzy_options_frame.pack(fill="x", padx=5, pady=2)
         else:
-            self.fuzzy_options_frame.pack_forget()  # Changed from fuzzy_strategy_frame
-
+            self.fuzzy_options_frame.pack_forget()
+    
     # -------------------------------------------------------------------------
     # File handling
     # -------------------------------------------------------------------------
+    
     def add_files(self):
         files = filedialog.askopenfilenames(
-            title="Select MuseScore files",
+            title=self.t['select_files_title'],
             filetypes=[("MuseScore compressed", "*.mscz")]
         )
         for f in files:
@@ -345,16 +530,16 @@ class ConcatenateGUI:
     def select_log_file(self):
         """Select a log file location"""
         log_file = filedialog.asksaveasfilename(
-            title="Select log file location",
+            title=self.t['select_log_file_title'],
             defaultextension=".log",
             filetypes=[("Log files", "*.log"), ("All files", "*.*")]
         )
         if log_file:
-            self.log_file_var.set(log_file)   
-
+            self.log_file_var.set(log_file)
 
     def select_output(self):
         f = filedialog.asksaveasfilename(
+            title=self.t['select_output_title'],
             defaultextension=".mscz",
             filetypes=[("MuseScore compressed", "*.mscz")]
         )
@@ -372,7 +557,6 @@ class ConcatenateGUI:
     def remove_selected(self):
         selections = self.listbox.curselection()
         if selections:
-            # Remove from the end to avoid index shifting issues
             for index in sorted(selections, reverse=True):
                 self.files.pop(index)
                 self.listbox.delete(index)
@@ -384,11 +568,11 @@ class ConcatenateGUI:
     def save_file_list(self):
         """Save the current file list to a text file"""
         if not self.files:
-            messagebox.showwarning("Warning", "No files to save")
+            messagebox.showwarning(self.t['warning_title'], self.t['warning_no_files_save'])
             return
             
         filename = filedialog.asksaveasfilename(
-            title="Save file list",
+            title=self.t['save_list_title'],
             defaultextension=".txt",
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
         )
@@ -398,14 +582,16 @@ class ConcatenateGUI:
                 with open(filename, 'w', encoding='utf-8') as f:
                     for file_path in self.files:
                         f.write(file_path + '\n')
-                messagebox.showinfo("Success", f"File list saved to:\n{filename}")
+                messagebox.showinfo(self.t['success_title'], 
+                                   self.t.format('save_list_success', filename=filename))
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to save file list:\n{e}")
+                messagebox.showerror(self.t['error_title'], 
+                                    self.t.format('save_list_error', error=str(e)))
                 
     def load_file_list(self):
         """Load a file list from a text file"""
         filename = filedialog.askopenfilename(
-            title="Load file list",
+            title=self.t['load_list_title'],
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
         )
         
@@ -414,7 +600,6 @@ class ConcatenateGUI:
                 with open(filename, 'r', encoding='utf-8') as f:
                     new_files = [line.strip() for line in f if line.strip()]
                 
-                # Validate that files exist
                 valid_files = []
                 missing_files = []
                 
@@ -426,28 +611,30 @@ class ConcatenateGUI:
                 
                 if missing_files:
                     messagebox.showwarning(
-                        "Missing Files", 
-                        f"{len(missing_files)} files could not be found and were skipped:\n\n" +
-                        "\n".join(missing_files[:10]) + 
-                        ("\n..." if len(missing_files) > 10 else "")
+                        self.t['missing_files_title'], 
+                        self.t.format('missing_files_message',
+                                     count=len(missing_files),
+                                     files="\n".join(missing_files[:10]) + 
+                                           ("\n..." if len(missing_files) > 10 else ""))
                     )
                 
                 if valid_files:
-                    # Clear current list and add loaded files
                     self.files = valid_files
                     self.refresh_listbox()
-                    messagebox.showinfo("Success", f"Loaded {len(valid_files)} files")
+                    messagebox.showinfo(self.t['success_title'], 
+                                       self.t.format('load_list_success', count=len(valid_files)))
                 else:
-                    messagebox.showwarning("Warning", "No valid files found in the list")
+                    messagebox.showwarning(self.t['warning_title'], 
+                                          self.t['warning_no_valid_files'])
                     
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to load file list:\n{e}")                
+                messagebox.showerror(self.t['error_title'], 
+                                    self.t.format('load_list_error', error=str(e)))
 
     # -------------------------------------------------------------------------
     # List reordering
     # -------------------------------------------------------------------------
     
-    # allow only one file to move up/down
     def move_up(self):
         selections = self.listbox.curselection()
         if len(selections) == 1 and selections[0] > 0:
@@ -461,25 +648,6 @@ class ConcatenateGUI:
             idx = selections[0]
             self.files[idx+1], self.files[idx] = self.files[idx], self.files[idx+1]
             self.refresh_listbox(idx+1)
-    """
-    ## allow selection to move up/down
-    def move_up(self):
-        selections = self.listbox.curselection()
-        if selections and selections[0] > 0:  # Only if first selected item can move up
-            # For simplicity, let's just move the first selected item
-            idx = selections[0]
-            self.files[idx-1], self.files[idx] = self.files[idx], self.files[idx-1]
-            self.refresh_listbox(idx-1)
-
-    def move_down(self):
-        selections = self.listbox.curselection()
-        if selections and selections[-1] < len(self.files)-1:  # Only if last selected item can move down
-            # For simplicity, let's just move the last selected item  
-            idx = selections[-1]
-            self.files[idx+1], self.files[idx] = self.files[idx], self.files[idx+1]
-            self.refresh_listbox(idx+1)     
-    ###               
-    """        
 
     def refresh_listbox(self, new_index=None):
         self.listbox.delete(0, tk.END)
@@ -488,59 +656,48 @@ class ConcatenateGUI:
         if new_index is not None:
             self.listbox.selection_set(new_index)
             self.listbox.activate(new_index)
-            
-  
 
     # -------------------------------------------------------------------------
     # Run concatenation
     # -------------------------------------------------------------------------
+    
     def run(self):
-        #logger.debug(f"RUN: Run method called")
-        
         # Show progress bar at start
         self.progress.pack(pady=5, fill="x", padx=10)
         self.progress['value'] = 0
-        self.root.update_idletasks()  # Force GUI update
-    
+        self.root.update_idletasks()
     
         if not self.files:
-            messagebox.showerror("Error", "No input files selected")
+            messagebox.showerror(self.t['error_title'], self.t['error_no_files'])
             return
-        output = self.get_output_path()  # ← Use the new method
+        output = self.get_output_path()
         if not output:
-            messagebox.showerror("Error", "No output file specified")
+            messagebox.showerror(self.t['error_title'], self.t['error_no_output'])
             return
 
         try:
-            # Show and reset progress bar
             self.progress.pack(pady=5, fill="x", padx=10)
-            self.progress['maximum'] = len(self.files)  # Total files to process
+            self.progress['maximum'] = len(self.files)
             self.progress['value'] = 0
             
-            self.status.set("Starting...")
-            self.root.update_idletasks()  # Force GUI update
+            self.status.set(self.t['status_starting'])
+            self.root.update_idletasks()
             
             log_level = None
             log_file = None
             
             if self.enable_logging_var.get():
                 log_level = self.log_level_var.get()
-                
-                # Use custom log file if specified, otherwise use default
                 if self.log_file_var.get().strip():
                     log_file = self.log_file_var.get().strip()
                 else:
-                    # Default log files in current directory
-                    if log_level == "DEBUG":
-                        log_file = "mscz-cat.log" # better log to same file after 2nd thought
-                    else:
-                        log_file = "mscz-cat.log"
+                    log_file = "mscz-cat.log"
 
-            # Get the frame copying options
+            # Get frame copying options
             copy_frames = self.copy_frames_var.get()
             copy_title_frames = self.copy_title_frames_var.get() if copy_frames else False
             copy_system_locks = self.copy_system_locks_var.get()
-            copy_pictures = self.copy_pictures_var.get()
+            copy_pictures = self.copy_pictures_var.get()  
             
             # Get break options
             break_types = []
@@ -551,15 +708,13 @@ class ConcatenateGUI:
             if self.break_section_var.get():
                 break_types.append("section")
 
-            # If no breaks selected, use "none"
             if not break_types:
-                break_type = "none"  # Keep as string for backward compatibility
+                break_type = "none"
             else:
-                break_type = ",".join(break_types)  # Join multiple types with commas
+                break_type = ",".join(break_types)
 
             break_options = None
-            if "section" in break_types:  # Use break_types list here for the check
-                # Get section break options
+            if "section" in break_types:
                 try:
                     pause_value = float(self.section_pause_var.get())
                 except ValueError:
@@ -573,23 +728,19 @@ class ConcatenateGUI:
                     'show_courtesy_sig': self.show_courtesy_sig_var.get(),
                     'auto_detect_repeats': self.has_repeats_var.get()
                 }
-             
- 
             elif break_type == "page":
                 break_options = {'page_break': True}
-            elif break_type == "line":  # Add this for system breaks
+            elif break_type == "line":
                 break_options = {'system_break': True}
-
 
             # Get fuzzy matching options
             fuzzy_matching = self.fuzzy_matching_var.get()
             number_strategy = self.number_strategy_var.get().upper()
             try:
                 match_threshold = float(self.match_threshold_var.get())
-                # Clamp threshold to valid range
                 match_threshold = max(0.0, min(1.0, match_threshold))
             except ValueError:
-                match_threshold = 0.7  # Default if invalid
+                match_threshold = 0.7
 
             # Call the concatenate function
             success, skipped_files = ms_concatenate.concatenate(
@@ -602,68 +753,56 @@ class ConcatenateGUI:
                     break_type=break_type,
                     break_options=break_options,
                     skip_incompatible=self.skip_incompatible_var.get(),
-                    fuzzy_matching=fuzzy_matching,           # fuzzy
-                    match_threshold=match_threshold,         # fuzzy
-                    log_level=log_level,  # None if logging disabled
-                    log_file=log_file,     # None if logging disabled
-                    console_output=False,  # Never output to console
-                    overwrite_log=self.overwrite_log_var.get(),  #overwrite logfile     
+                    fuzzy_matching=fuzzy_matching,
+                    match_threshold=match_threshold,
+                    number_strategy=number_strategy,
+                    log_level=log_level,
+                    log_file=log_file,
+                    console_output=False,
+                    overwrite_log=self.overwrite_log_var.get(),
                     progress_callback=self.update_progress     
                 )
-                
-                
-            # Show duplicate warnings if any -- removed messagebox - log instead
-            #if duplicate_warnings:
-                #logger.info(f"Duplicate eids automatically resolved in: {', '.join(duplicate_warnings)}")
-                #info_msg = f"Duplicate eids detected in: {', '.join(duplicate_warnings)}\n\nEids were automatically renamed and system lock references were updated.\n\nAll system locks have been preserved."
-                #messagebox.showinfo("EIDs Updated", info_msg)
      
-            self.status.set("Done!")
-            self.progress.pack_forget()  # Hide progress bar when done
-            messagebox.showinfo("Success", f"Files concatenated into:\n{output}")
+            self.status.set(self.t['status_done'])
+            self.progress.pack_forget()
+            messagebox.showinfo(self.t['success_title'], 
+                               self.t.format('success_message', output=output))
         except Exception as e:
             traceback.print_exc()
-            messagebox.showerror("Error", f"An error occurred:\n{e}")
-            self.status.set("Error")
-            self.progress.pack_forget()  # Hide progress bar on error
+            messagebox.showerror(self.t['error_title'], 
+                                self.t.format('error_occurred', error=str(e)))
+            self.status.set(self.t['status_error'])
+            self.progress.pack_forget()
 
     def update_progress(self, current, total):
         """Callback function to update progress bar"""
         self.progress['value'] = current
-        self.status.set(f"Processing file {current}/{total}")
-        self.root.update_idletasks()  # Keep GUI responsive
-            
-    def toggle_logging_options(self):
-                """Show/hide logging options based on checkbox state"""
-                if self.enable_logging_var.get():
-                    self.logging_options_frame.pack(fill="x", padx=10, pady=5)
-                else:
-                    self.logging_options_frame.pack_forget()                  
+        self.status.set(self.t.format('status_processing', current=current, total=total))
+        self.root.update_idletasks()
 
     # -------------------------------------------------------------------------
     # About dialog
     # -------------------------------------------------------------------------
+    
     def show_about(self):
         about = tk.Toplevel(self.root)
-        about.title("About MuseScore Concatenator")
+        about.title(self.t['about'])
         about.geometry("400x275")
         about.resizable(False, False)
 
-        tk.Label(about, text="MuseScore Concatenator", font=("Arial", 14, "bold")).pack(pady=10)
-        tk.Label(about, text="Version 1.5.2 (20260930)", font=("Arial", 11)).pack(pady=2)
-        tk.Label(about, text="© 2025, 2026 Diego Denolf", font=("Arial", 10)).pack(pady=2)
+        tk.Label(about, text=self.t['app_title'], font=("Arial", 14, "bold")).pack(pady=10)
+        tk.Label(about, text=self.t.format('about_version', version=APP_VERSION, date=APP_DATE), 
+                font=("Arial", 11)).pack(pady=2)
+        tk.Label(about, text=self.t['about_author'], font=("Arial", 10)).pack(pady=2)
         
         msg = (
             "Source: https://github.com/diedeno/mscz-concatenator\n" 
-            "Based on the mscore library and script © 2025 Leon Dionne https://github.com/Zen-Master-SoSo/mscore\n"
-            
-            "Licensed under the GNU GPL v3."
+            "Based on the mscore library and script © 2025 Leon Dionne https://github.com/Zen-Master-SoSo/mscore\n\n"
+            + self.t['about_license']
         )
         tk.Label(about, text=msg, wraplength=360, justify="left").pack(padx=15, pady=10)
 
         tk.Button(about, text="Close", command=about.destroy).pack(pady=5)
-
-
 
 
 if __name__ == "__main__":
