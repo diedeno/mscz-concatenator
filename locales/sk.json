@@ -72,4 +72,11 @@
   "about_version": "Verzia {version} ({date})",
   "about_author": "© 2025 Diego Denolf",
   "about_license": "Licencované pod GNU GPL v3."
+  "open_in_musescore": "Otvoriť v MuseScore",
+  "musescore_not_found": "Spustiteľný súbor MuseScore sa nenašiel.",
+  "select_musescore_title": "Vyberte spustiteľný súbor MuseScore",
+  "musescore_launched": "Otvorené v MuseScore",
+  "musescore_launch_failed": "Nepodarilo sa spustiť MuseScore:\n{error}",
+  "no_output_file": "Zatiaľ nie je k dispozícii žiadny spojený súbor.\nNajprv spustite spájanie.",
+  "set_musescore_path": "Nastaviť cestu k MuseScore"
 }

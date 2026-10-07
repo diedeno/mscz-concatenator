@@ -71,5 +71,12 @@
   "restart_now_message": "Jetzt neu starten, um die neue Sprache anzuwenden?",
   "about_version": "Version {version} ({date})",
   "about_author": "© 2025 Diego Denolf",
-  "about_license": "Lizenziert unter GNU GPL v3."
+  "about_license": "Lizenziert unter GNU GPL v3.",
+  "open_in_musescore": "In MuseScore öffnen",
+  "musescore_not_found": "MuseScore-Programm nicht gefunden.",
+  "select_musescore_title": "MuseScore-Programm auswählen",
+  "musescore_launched": "In MuseScore geöffnet",
+  "musescore_launch_failed": "MuseScore konnte nicht gestartet werden:\n{error}",
+  "no_output_file": "Noch keine zusammengefügte Datei verfügbar.\nFühren Sie zuerst eine Zusammenfügung durch.",
+  "set_musescore_path": "MuseScore-Pfad festlegen"
 }
