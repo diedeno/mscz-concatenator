@@ -1,8 +1,13 @@
 mscz-concatenator changelog
 
-v1.6  20261006  -Feature: Multi-language support (English, French, German, Dutch, Slovak)
-                -Feature: Language selector button and automatic system language detection
-                -Feature: Language preference saved in user config file
+v1.7  20261007  -MuseScore plugin (ConcatenateScores.qml) to launch the oncatenator directly from MuseScore
+                -"Open in MuseScore" button to open the concatenated result
+                -Automatic MuseScore executable detection
+                -MuseScore path saved in user config (right-click the button to change it)
+
+v1.6  20261006  -Multi-language support (English, French, German, Dutch, Slovak)
+                -Language selector button and automatic system language detection
+                -Language preference saved in user config file
                 -Config file location: 
                    Linux:   ~/.config/mscz-concatenator/config.json
                    Windows: %APPDATA%\mscz-concatenator\config.json
