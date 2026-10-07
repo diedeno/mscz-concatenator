@@ -71,5 +71,12 @@
   "restart_now_message": "Nu herstarten om de nieuwe taal toe te passen?",
   "about_version": "Versie {version} ({date})",
   "about_author": "© 2025 Diego Denolf",
-  "about_license": "Gelicenseerd onder GNU GPL v3."
+  "about_license": "Gelicenseerd onder GNU GPL v3.",
+  "open_in_musescore": "Openen in MuseScore",
+  "musescore_not_found": "MuseScore-programma niet gevonden.",
+  "select_musescore_title": "Selecteer MuseScore-programma",
+  "musescore_launched": "Geopend in MuseScore",
+  "musescore_launch_failed": "Kon MuseScore niet starten:\n{error}",
+  "no_output_file": "Nog geen samengevoegd bestand beschikbaar.\nVoer eerst een samenvoeging uit.",
+  "set_musescore_path": "MuseScore-pad instellen"
 }

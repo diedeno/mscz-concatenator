@@ -71,5 +71,12 @@
   "restart_now_message": "Restart now to apply the new language?",
   "about_version": "Version {version} ({date})",
   "about_author": "© 2025 Diego Denolf",
-  "about_license": "Licensed under the GNU GPL v3."
+  "about_license": "Licensed under the GNU GPL v3.",
+  "open_in_musescore": "Open in MuseScore",
+  "musescore_not_found": "MuseScore executable not found.",
+  "select_musescore_title": "Select MuseScore executable",
+  "musescore_launched": "Opened in MuseScore",
+  "musescore_launch_failed": "Could not launch MuseScore:\n{error}",
+  "no_output_file": "No concatenated file available yet.\nRun a concatenation first.",
+  "set_musescore_path": "Set MuseScore path"
 }
