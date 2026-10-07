@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-#  Copyright 2025-2026 Diego Denolf <graffesmusic@gmail.com> 
+#  Copyright 2025 Diego Denolf <graffesmusic@gmail.com> 
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -32,14 +32,17 @@ import os
 import sys
 import json
 import locale
+import subprocess
+import shutil
+from pathlib import Path
 from appdirs import user_config_dir
 import ms_concatenate
 
 
 # Application metadata
 APP_NAME = "mscz-concatenator"
-APP_VERSION = "1.6"
-APP_DATE = "20261006"
+APP_VERSION = "1.7"
+APP_DATE = "20261007"
 
 # Supported languages
 SUPPORTED_LANGUAGES = {
@@ -79,10 +82,8 @@ def save_config(config):
 def get_system_language():
     """Detect the system language and return a 2-letter code"""
     try:
-        # Use the non-deprecated API (Python 3.11+)
         lang, _ = locale.getlocale()
         if not lang:
-            # Fallback to environment variables (works on Linux/macOS)
             lang = os.environ.get('LANG') or os.environ.get('LC_ALL') or os.environ.get('LC_MESSAGES')
         if lang:
             code = lang.split('_')[0].split('.')[0].lower()
@@ -100,6 +101,73 @@ def get_resource_path(relative_path):
     except AttributeError:
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
+
+
+def detect_musescore_path():
+    """
+    Try to auto-detect the MuseScore executable.
+    Returns the path if found, otherwise None.
+    """
+    # 1. Try common command names (works if in PATH)
+    for name in ["mscore4portable", "musescore4", "musescore", "MuseScore4"]:
+        path = shutil.which(name)
+        if path:
+            return path
+    
+    # 2. Try OS-specific default locations
+    if sys.platform == "win32":
+        candidates = [
+            Path("C:/Program Files/MuseScore 4/bin/MuseScore4.exe"),
+            Path("C:/Program Files/MuseScore 4/bin/musescore4.exe"),
+            Path("C:/Program Files (x86)/MuseScore 4/bin/MuseScore4.exe"),
+        ]
+    elif sys.platform == "darwin":
+        candidates = [
+            Path("/Applications/MuseScore 4.app/Contents/MacOS/mscore"),
+            Path.home() / "Applications" / "MuseScore 4.app" / "Contents" / "MacOS" / "mscore",
+        ]
+    else:  # Linux
+        candidates = [
+            Path.home() / ".local" / "bin" / "mscore4portable",
+            Path("/usr/bin/mscore4portable"),
+            Path("/usr/bin/musescore4"),
+            Path("/usr/bin/musescore"),
+            Path("/snap/bin/musescore"),
+            Path("/var/lib/flatpak/exports/bin/org.musescore.MuseScore"),
+        ]
+    
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    
+    return None
+
+
+def launch_musescore(musescore_path, file_path):
+    """
+    Launch MuseScore with the given file, detached.
+    Returns (success: bool, error_message: str or None).
+    """
+    if not musescore_path:
+        return False, "MuseScore path not configured"
+    if not os.path.exists(musescore_path):
+        return False, f"MuseScore not found at: {musescore_path}"
+    if not os.path.exists(file_path):
+        return False, f"File not found: {file_path}"
+    
+    try:
+        if sys.platform == "win32":
+            subprocess.Popen([musescore_path, file_path], close_fds=True)
+        else:
+            subprocess.Popen(
+                [musescore_path, file_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        return True, None
+    except Exception as e:
+        return False, str(e)
 
 
 class Translation:
@@ -151,8 +219,8 @@ class ConcatenateGUI:
         self.root.minsize(900, 650)
         
         self.files = []
+        self.last_output_path = None
         
-       
         # Main container with 2 columns
         main_container = tk.Frame(root)
         main_container.pack(fill="both", expand=True, padx=10, pady=10)
@@ -392,10 +460,30 @@ class ConcatenateGUI:
         # Action buttons
         action_frame = tk.Frame(bottom_container)
         action_frame.pack(pady=5)
-        tk.Button(action_frame, text=self.t['concatenate'], command=self.run).pack(side="left", padx=5)
-        tk.Button(action_frame, text=self.t['language_menu'], command=self.show_language_dialog).pack(side="left", padx=5)
-        tk.Button(action_frame, text=self.t['about'], command=self.show_about).pack(side="left", padx=5)
-        tk.Button(action_frame, text=self.t['exit'], command=self.root.quit).pack(side="left", padx=5)
+        
+        tk.Button(action_frame, text=self.t['concatenate'], 
+                 command=self.run).pack(side="left", padx=5)
+        
+        # "Open in MuseScore" — disabled until first successful concatenation
+        self.open_result_btn = tk.Button(
+            action_frame, 
+            text=self.t['open_in_musescore'],
+            command=self.open_last_result,
+            state="disabled"
+        )
+        self.open_result_btn.pack(side="left", padx=5)
+        
+        # Right-click to reconfigure MuseScore path
+        self.open_result_btn.bind("<Button-3>", self._reconfigure_musescore)
+        if sys.platform == "darwin":
+            self.open_result_btn.bind("<Button-2>", self._reconfigure_musescore)
+        
+        tk.Button(action_frame, text=self.t['language_menu'], 
+                 command=self.show_language_dialog).pack(side="left", padx=5)
+        tk.Button(action_frame, text=self.t['about'], 
+                 command=self.show_about).pack(side="left", padx=5)
+        tk.Button(action_frame, text=self.t['exit'], 
+                 command=self.root.quit).pack(side="left", padx=5)
         
         # Status and progress
         self.status = tk.StringVar()
@@ -405,77 +493,6 @@ class ConcatenateGUI:
         self.progress = ttk.Progressbar(bottom_container, mode='determinate')
         self.progress.pack(fill="x", pady=5)
         self.progress.pack_forget()
-    
-    # -------------------------------------------------------------------------
-    # Menu and language
-    # -------------------------------------------------------------------------
-    
-    def show_language_dialog(self):
-        """Show a dialog to select the language"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title(self.t['language_menu'])
-        dialog.transient(self.root)
-        dialog.resizable(False, False)
-        
-        tk.Label(dialog, text=self.t['language_menu'], 
-                font=("Arial", 11, "bold")).pack(pady=10, padx=20)
-        
-        # Create radio buttons for each language
-        lang_var = tk.StringVar(value=self.lang)
-        
-        for code, name in SUPPORTED_LANGUAGES.items():
-            tk.Radiobutton(
-                dialog, 
-                text=name, 
-                variable=lang_var, 
-                value=code
-            ).pack(anchor="w", padx=30, pady=2)
-        
-        def apply():
-            selected = lang_var.get()
-            dialog.destroy()
-            if selected != self.lang:
-                self.change_language(selected)
-        
-        btn_frame = tk.Frame(dialog)
-        btn_frame.pack(pady=10)
-        tk.Button(btn_frame, text="OK", command=apply, width=10).pack(side="left", padx=5)
-        tk.Button(btn_frame, text="Cancel", command=dialog.destroy, width=10).pack(side="left", padx=5)
-        
-        # Center dialog on parent
-        dialog.update_idletasks()
-        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
-        dialog.geometry(f"+{x}+{y}")
-
-
-    def change_language(self, lang):
-        """Change language and save preference"""
-        if lang == self.lang:
-            return
-        
-        # Save preference
-        self.config['language'] = lang
-        save_config(self.config)
-        
-        # Ask user if they want to restart now
-        if messagebox.askyesno(
-            self.t['restart_now_title'],
-            self.t['restart_now_message']
-        ):
-            self.restart_app()
-        else:
-            lang_name = SUPPORTED_LANGUAGES.get(lang, lang)
-            messagebox.showinfo(
-                self.t['language_changed_title'],
-                self.t.format('language_changed_message', lang=lang_name)
-            )
-
-
-    def restart_app(self):
-        """Restart the application"""
-        self.root.destroy()
-        os.execv(sys.executable, [sys.executable] + sys.argv)
     
     # -------------------------------------------------------------------------
     # Toggle methods
@@ -512,6 +529,72 @@ class ConcatenateGUI:
             self.fuzzy_options_frame.pack(fill="x", padx=5, pady=2)
         else:
             self.fuzzy_options_frame.pack_forget()
+    
+    # -------------------------------------------------------------------------
+    # Language selection
+    # -------------------------------------------------------------------------
+    
+    def show_language_dialog(self):
+        """Show a dialog to select the language"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self.t['language_menu'])
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        
+        tk.Label(dialog, text=self.t['language_menu'], 
+                font=("Arial", 11, "bold")).pack(pady=10, padx=20)
+        
+        lang_var = tk.StringVar(value=self.lang)
+        
+        for code, name in SUPPORTED_LANGUAGES.items():
+            tk.Radiobutton(
+                dialog, 
+                text=name, 
+                variable=lang_var, 
+                value=code
+            ).pack(anchor="w", padx=30, pady=2)
+        
+        def apply():
+            selected = lang_var.get()
+            dialog.destroy()
+            if selected != self.lang:
+                self.change_language(selected)
+        
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(pady=10)
+        tk.Button(btn_frame, text="OK", command=apply, width=10).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Cancel", command=dialog.destroy, width=10).pack(side="left", padx=5)
+        
+        # Center dialog on parent
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{x}+{y}")
+    
+    def change_language(self, lang):
+        """Change language and save preference"""
+        if lang == self.lang:
+            return
+        
+        self.config['language'] = lang
+        save_config(self.config)
+        
+        if messagebox.askyesno(
+            self.t['restart_now_title'],
+            self.t['restart_now_message']
+        ):
+            self.restart_app()
+        else:
+            lang_name = SUPPORTED_LANGUAGES.get(lang, lang)
+            messagebox.showinfo(
+                self.t['language_changed_title'],
+                self.t.format('language_changed_message', lang=lang_name)
+            )
+    
+    def restart_app(self):
+        """Restart the application"""
+        self.root.destroy()
+        os.execv(sys.executable, [sys.executable] + sys.argv)
     
     # -------------------------------------------------------------------------
     # File handling
@@ -658,11 +741,117 @@ class ConcatenateGUI:
             self.listbox.activate(new_index)
 
     # -------------------------------------------------------------------------
+    # Open in MuseScore
+    # -------------------------------------------------------------------------
+    
+    def open_last_result(self):
+        """Open the last concatenated file in MuseScore"""
+        if not self.last_output_path or not os.path.exists(self.last_output_path):
+            messagebox.showwarning(self.t['warning_title'], 
+                                  self.t['no_output_file'])
+            return
+        
+        # Get MuseScore path from config
+        musescore_path = self.config.get('musescore_path')
+        
+        # Auto-detect if not configured
+        if not musescore_path:
+            musescore_path = detect_musescore_path()
+            if musescore_path:
+                self.config['musescore_path'] = musescore_path
+                save_config(self.config)
+        
+        # If still not found, ask the user to locate MuseScore
+        if not musescore_path:
+            if not messagebox.askyesno(self.t['warning_title'],
+                                       self.t['musescore_not_found'] + 
+                                       "\n\n" + self.t['set_musescore_path'] + "?"):
+                return
+            
+            musescore_path = filedialog.askopenfilename(
+                title=self.t['select_musescore_title'],
+                filetypes=[("All files", "*.*")]
+            )
+            if not musescore_path:
+                return
+            
+            self.config['musescore_path'] = musescore_path
+            save_config(self.config)
+        
+        # Launch MuseScore
+        success, error = launch_musescore(musescore_path, self.last_output_path)
+        if not success:
+            messagebox.showerror(self.t['error_title'], 
+                                self.t.format('musescore_launch_failed', error=error))
+    
+    def _reconfigure_musescore(self, event=None):
+        """Let the user update the MuseScore path (right-click on the Open button)"""
+        current = self.config.get('musescore_path', '') or "(not set)"
+        
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self.t['set_musescore_path'])
+        dialog.transient(self.root)
+       
+        
+        tk.Label(dialog, text=self.t['set_musescore_path'], 
+                font=("Arial", 11, "bold")).pack(pady=10, padx=20)
+        
+        tk.Label(dialog, text="Current: " + current, 
+                fg="gray", font=("Arial", 8)).pack(padx=20)
+                
+
+        
+        path_var = tk.StringVar(value=self.config.get('musescore_path', ''))
+        entry = tk.Entry(dialog, textvariable=path_var, width=50)
+        entry.pack(padx=20, pady=10)
+        
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(pady=10)
+        
+        # Center the dialog on the parent
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Grab focus AFTER the window is visible
+        dialog.after(100, lambda: (dialog.focus_set(), dialog.grab_set()))
+        
+        def browse():
+            path = filedialog.askopenfilename(
+                title=self.t['select_musescore_title'],
+                filetypes=[("All files", "*.*")]
+            )
+            if path:
+                path_var.set(path)
+        
+        def auto_detect():
+            detected = detect_musescore_path()
+            if detected:
+                path_var.set(detected)
+            else:
+                messagebox.showinfo(self.t['warning_title'], 
+                                  "MuseScore not found in common locations.")
+        
+        def apply():
+            new_path = path_var.get().strip()
+            if new_path:
+                self.config['musescore_path'] = new_path
+            else:
+                self.config.pop('musescore_path', None)
+            save_config(self.config)
+            dialog.destroy()
+        
+        tk.Button(btn_frame, text="Auto-detect", command=auto_detect).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Browse", command=browse).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="OK", command=apply).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Cancel", command=dialog.destroy).pack(side="left", padx=5)
+    
+    # -------------------------------------------------------------------------
     # Run concatenation
     # -------------------------------------------------------------------------
     
     def run(self):
-        # Show progress bar at start
         self.progress.pack(pady=5, fill="x", padx=10)
         self.progress['value'] = 0
         self.root.update_idletasks()
@@ -693,13 +882,11 @@ class ConcatenateGUI:
                 else:
                     log_file = "mscz-cat.log"
 
-            # Get frame copying options
             copy_frames = self.copy_frames_var.get()
             copy_title_frames = self.copy_title_frames_var.get() if copy_frames else False
             copy_system_locks = self.copy_system_locks_var.get()
             copy_pictures = self.copy_pictures_var.get()  
             
-            # Get break options
             break_types = []
             if self.break_system_var.get():
                 break_types.append("line")
@@ -733,7 +920,6 @@ class ConcatenateGUI:
             elif break_type == "line":
                 break_options = {'system_break': True}
 
-            # Get fuzzy matching options
             fuzzy_matching = self.fuzzy_matching_var.get()
             number_strategy = self.number_strategy_var.get().upper()
             try:
@@ -742,7 +928,6 @@ class ConcatenateGUI:
             except ValueError:
                 match_threshold = 0.7
 
-            # Call the concatenate function
             success, skipped_files = ms_concatenate.concatenate(
                     self.files, 
                     output, 
@@ -765,6 +950,11 @@ class ConcatenateGUI:
      
             self.status.set(self.t['status_done'])
             self.progress.pack_forget()
+            
+            # Store the output path and enable the "Open" button
+            self.last_output_path = output
+            self.open_result_btn.config(state="normal")
+            
             messagebox.showinfo(self.t['success_title'], 
                                self.t.format('success_message', output=output))
         except Exception as e:
@@ -806,6 +996,54 @@ class ConcatenateGUI:
 
 
 if __name__ == "__main__":
+    # Parse command-line arguments
+    preload_files = []
+    show_help = False
+    show_version = False
+    
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--preload" and i + 1 < len(args):
+            preload_files.append(args[i + 1])
+            i += 2
+        elif arg == "--version":
+            show_version = True
+            i += 1
+        elif arg == "--help" or arg == "-h":
+            show_help = True
+            i += 1
+        else:
+            i += 1
+    
+    if show_version:
+        print(f"MuseScore Concatenator v{APP_VERSION}")
+        sys.exit(0)
+    
+    if show_help:
+        print(f"MuseScore Concatenator v{APP_VERSION}")
+        print()
+        print("Usage: mscz-concatenator [OPTIONS]")
+        print()
+        print("Options:")
+        print("  --preload FILE  Add FILE to the concatenation list on startup")
+        print("                  (may be used multiple times)")
+        print("  --version       Show version and exit")
+        print("  --help, -h      Show this help and exit")
+        print()
+        print("Without arguments, launches the normal GUI with an empty file list.")
+        sys.exit(0)
+    
     root = tk.Tk()
     app = ConcatenateGUI(root)
+    
+    for preload_file in preload_files:
+        if os.path.exists(preload_file):
+            if preload_file not in app.files:
+                app.files.append(preload_file)
+                app.listbox.insert(tk.END, preload_file)
+        else:
+            print(f"Warning: preload file not found: {preload_file}")
+    
     root.mainloop()
