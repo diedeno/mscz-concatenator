@@ -21,8 +21,13 @@ Consider using the mscz-trackname-editor to match part names. https://github.com
 - optional: skip files with incompatible instrumentation
 - optional: log to file
 - load/save selection from file
-- fuzzy part matching
-- Available as: - Windows standalone `.exe` and Linux executable
+- fuzzy part matching (handles naming variations like "Violin 1" vs "1st Violin")
+- Load/save the file selection from a text file.
+- Automatic removal of Excerpts (linked parts) from the concatenated score to prevent MuseScore crashes.
+- Available as: Windows standalone `.exe` , Mac and Linux executable
+- Multi-language interface (English, French, German, Dutch, Slovak).
+- "Open in MuseScore" button to open the result directly (MuseScore path auto-detected).
+- Optional MuseScore plugin for one-click launch from within MuseScore.
 ---
 
 ## Installation
@@ -54,6 +59,29 @@ python3 mscz-concatenator.py
 ````
 
 ---
+
+## MuseScore Plugin (optional)
+
+Launch the concatenator directly from MuseScore.
+
+### Installation
+
+1. Download the binary for your OS (see Releases) and `ConcatenateScores.zip`.
+
+2. Unzip into your MuseScore Plugins folder:
+   - **Linux**:   `~/Documents/MuseScore4/Plugins/`
+   - **Windows**: `%USERPROFILE%\Documents\MuseScore4\Plugins\`
+   - **macOS**:   `~/Documents/MuseScore4/Plugins/`
+
+3. Copy the binary (`mscz-concatenator` or `mscz-concatenator.exe`)
+   into the `Concatenator/` subfolder, next to the `.qml` file.
+
+4. Linux/macOS only — make it executable:
+   ```bash
+   chmod +x ~/Documents/MuseScore4/Plugins/Concatenator/mscz-concatenator
+
+---
+
 
 ## Implementation
 
