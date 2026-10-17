@@ -15,12 +15,11 @@ Consider using the mscz-trackname-editor to match part names. https://github.com
 ### Features 
 - Combine multiple `.mscz` MuseScore files into one.
 - Reorder files before concatenation.
-- choose to copy frames, title frames, pictures and/or systemlocks
+- choose to copy frames, title frames, Fboxes, pictures, pagelocks and/or systemlocks
 - eid conflict resolution
 - add system break, page break or section break after each score
 - optional: skip files with incompatible instrumentation
 - optional: log to file
-- load/save selection from file
 - fuzzy part matching (handles naming variations like "Violin 1" vs "1st Violin")
 - Load/save the file selection from a text file.
 - Automatic removal of Excerpts (linked parts) from the concatenated score to prevent MuseScore crashes.
@@ -28,6 +27,7 @@ Consider using the mscz-trackname-editor to match part names. https://github.com
 - Multi-language interface (English, French, German, Dutch, Slovak).
 - "Open in MuseScore" button to open the result directly (MuseScore path auto-detected).
 - Optional MuseScore plugin for one-click launch from within MuseScore.
+- V2.0 support for MuseScore 5x
 ---
 
 ## Installation
