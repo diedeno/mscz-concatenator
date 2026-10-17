@@ -1,6 +1,14 @@
 mscz-concatenator changelog
 
-v1.7  20261007  -MuseScore plugin (ConcatenateScores.qml) to launch the oncatenator directly from MuseScore
+v2.0  20261017  -Support for MuseScore 5 files -- Part name detection for MSS5 (trackName moved inside Instrument)
+                -Preserve Page Locks when concatenating MSS5 scores
+                -"Copy FBoxes" option (disabled by default) to manage fretboard diagram legends from subsequent scores
+                -Fix: Part name detection for MSS5 (trackName moved inside Instrument)
+                -Fix: Replace deprecated trace() with trace_add() 
+                -UI: Tooltip on "Copy frames" explaining the page lock interaction
+                -CLI: Added missing command-line options (page locks, FBoxes, skip incompatible)
+
+v1.7  20261007  -MuseScore plugin (ConcatenateScores.qml) to launch the concatenator directly from MuseScore
                 -"Open in MuseScore" button to open the concatenated result
                 -Automatic MuseScore executable detection
                 -MuseScore path saved in user config (right-click the button to change it)
