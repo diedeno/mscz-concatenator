@@ -336,12 +336,25 @@ class Score(SmartTree):
 				for system_lock in system_locks:
 					start_measure = system_lock.find("startMeasure")
 					end_measure = system_lock.find("endMeasure")
-					
+                    
 					# Update startMeasure reference if it points to a renamed eid
 					if start_measure is not None and start_measure.text in eid_mapping:
 						start_measure.text = eid_mapping[start_measure.text]
-					
+                    
 					# Update endMeasure reference if it points to a renamed eid  
+					if end_measure is not None and end_measure.text in eid_mapping:
+						end_measure.text = eid_mapping[end_measure.text]
+            
+			# Update page lock references in the source score (MuseScore 5 feature)
+			page_locks = src_score.find("PageLocks")
+			if page_locks is not None:
+				for page_lock in page_locks:
+					start_measure = page_lock.find("startMeasure")
+					end_measure = page_lock.find("endMeasure")
+                    
+					if start_measure is not None and start_measure.text in eid_mapping:
+						start_measure.text = eid_mapping[start_measure.text]
+                    
 					if end_measure is not None and end_measure.text in eid_mapping:
 						end_measure.text = eid_mapping[end_measure.text]
 
@@ -619,12 +632,12 @@ class Score(SmartTree):
 		return has_repeats        
 
 					
-	def concatenate_score(self, source_score, copy_frames=True, copy_title_frames=True, copy_system_locks=True, copy_pictures=False, target_path=None):
+	def concatenate_score(self, source_score, copy_frames=True, copy_title_frames=True, copy_fboxes=False, copy_system_locks=True, copy_page_locks=True, copy_pictures=False, target_path=None):	
 		"""
 		Unified method to concatenate another Score into this one.
 		"""
 		from copy import deepcopy
-		FRAME_TAGS = ("VBox", "HBox", "TBox", "FBox")
+		FRAME_TAGS = ("VBox", "HBox", "TBox")
 
 		# Get the actual Score elements
 		tgt_score = self.tree.getroot().find(".//Score")
@@ -668,6 +681,12 @@ class Score(SmartTree):
 					elem_copy = deepcopy(elem)
 					tgt_staff.append(elem_copy)
 					
+				elif elem.tag == "FBox":
+					# FBox has its own toggle, independent of copy_frames
+					if copy_fboxes:
+						elem_copy = deepcopy(elem)
+						tgt_staff.append(elem_copy)                    
+					
 				elif copy_frames and elem.tag in FRAME_TAGS:
 					# Handle frame copying based on title frame option
 					if first_frame and not copy_title_frames and elem.tag in ("VBox", "TBox"):
@@ -695,7 +714,20 @@ class Score(SmartTree):
 					for system_lock in src_system_locks:
 						system_lock_copy = deepcopy(system_lock)
 						tgt_system_locks.append(system_lock_copy)
-		
+                        
+		# Copy PageLocks (MuseScore 5 feature)
+		if copy_page_locks:
+			src_page_locks = src_score.find("PageLocks")
+			if src_page_locks is not None:
+				tgt_page_locks = tgt_score.find("PageLocks")
+				if tgt_page_locks is None:
+					tgt_page_locks = deepcopy(src_page_locks)
+					tgt_score.append(tgt_page_locks)
+				else:
+					for page_lock in src_page_locks:
+						page_lock_copy = deepcopy(page_lock)
+						tgt_page_locks.append(page_lock_copy)                        
+			
 		# Copy pictures if requested and target path is provided
 		#if copy_pictures and target_path:
 		#	self.copy_pictures(source_score, target_path)
@@ -775,7 +807,12 @@ class Part(SmartNode):
 
 	@property
 	def name(self):
-		return self.element_text('trackName')
+		# MuseScore 4: <trackName> is a direct child of <Part>
+		name = self.element_text('trackName')
+		if name is None:
+			# MuseScore 5: <trackName> moved inside <Instrument>
+			name = self.instrument().track_name
+		return name
 
 	def __str__(self):
 		return f'<Part "{self.name}">'
