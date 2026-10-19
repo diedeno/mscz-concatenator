@@ -78,5 +78,8 @@
   "musescore_launched": "Geopend in MuseScore",
   "musescore_launch_failed": "Kon MuseScore niet starten:\n{error}",
   "no_output_file": "Nog geen samengevoegd bestand beschikbaar.\nVoer eerst een samenvoeging uit.",
-  "set_musescore_path": "MuseScore-pad instellen"
+  "set_musescore_path": "MuseScore-pad instellen",
+  "copy_page_locks": "Paginavergrendeling kopiëren",
+  "copy_fboxes": "Akkoorddiagrammen kopiëren (FBoxes)",
+  "copy_frames_tooltip": "Kaders van volgende partituren kopiëren. Indien uitgeschakeld, worden paginavergrendelinen die naar deze kaders verwijzen genegeerd."
 }

@@ -78,5 +78,8 @@
   "musescore_launched": "Opened in MuseScore",
   "musescore_launch_failed": "Could not launch MuseScore:\n{error}",
   "no_output_file": "No concatenated file available yet.\nRun a concatenation first.",
-  "set_musescore_path": "Set MuseScore path"
+  "set_musescore_path": "Set MuseScore path",
+  "copy_page_locks": "Copy page locks",
+  "copy_fboxes": "Copy fretboard diagrams (FBoxes)",
+  "copy_frames_tooltip": "Copy frames from subsequent scores. If disabled, page locks referencing these frames will be silently dropped."
 }

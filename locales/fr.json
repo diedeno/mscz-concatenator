@@ -78,5 +78,8 @@
   "musescore_launched": "Ouvert dans MuseScore",
   "musescore_launch_failed": "Impossible de lancer MuseScore :\n{error}",
   "no_output_file": "Aucun fichier concaténé disponible.\nLancez d'abord une concaténation.",
-  "set_musescore_path": "Définir le chemin de MuseScore"
+  "set_musescore_path": "Définir le chemin de MuseScore",
+  "copy_page_locks": "Copier les verrouillages de page",
+  "copy_fboxes": "Copier les diagrammes d'accords (FBoxes)",
+  "copy_frames_tooltip": "Copier les cadres des partitions suivantes. Si désactivé, les verrouillages de page référençant ces cadres seront ignorés."
 }

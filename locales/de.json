@@ -78,5 +78,8 @@
   "musescore_launched": "In MuseScore geöffnet",
   "musescore_launch_failed": "MuseScore konnte nicht gestartet werden:\n{error}",
   "no_output_file": "Noch keine zusammengefügte Datei verfügbar.\nFühren Sie zuerst eine Zusammenfügung durch.",
-  "set_musescore_path": "MuseScore-Pfad festlegen"
+  "set_musescore_path": "MuseScore-Pfad festlegen",
+  "copy_page_locks": "Seitenverriegelungen kopieren",
+  "copy_fboxes": "Griffbrettdiagramme kopieren (FBoxes)",
+  "copy_frames_tooltip": "Rahmen aus nachfolgenden Partituren kopieren. Wenn deaktiviert, werden Seitenverriegelungen, die sich auf diese Rahmen beziehen, ignoriert."
 }
