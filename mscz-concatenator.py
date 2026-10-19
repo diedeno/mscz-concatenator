@@ -41,8 +41,8 @@ import ms_concatenate
 
 # Application metadata
 APP_NAME = "mscz-concatenator"
-APP_VERSION = "1.7"
-APP_DATE = "20261007"
+APP_VERSION = "2.0"
+APP_DATE = "20261015"
 
 # Supported languages
 SUPPORTED_LANGUAGES = {
@@ -311,15 +311,25 @@ class ConcatenateGUI:
                                             variable=self.copy_frames_var,
                                             command=self.toggle_title_frames_option)
         self.copy_frames_cb.pack(anchor="w", pady=1)
+        self._add_tooltip(self.copy_frames_cb, self.t['copy_frames_tooltip'])
         
         self.copy_title_frames_var = tk.BooleanVar(value=True)
         self.copy_title_frames_cb = tk.Checkbutton(content_frame, text=self.t['copy_title_frames'], 
                                                   variable=self.copy_title_frames_var)
         self.copy_title_frames_cb.pack(anchor="w", padx=15, pady=1)
         
+        self.copy_fboxes_var = tk.BooleanVar(value=False) # Default OFF
+        self.copy_fboxes_cb = tk.Checkbutton(content_frame, text=self.t['copy_fboxes'],
+                                             variable=self.copy_fboxes_var)
+        self.copy_fboxes_cb.pack(anchor="w", padx=15, pady=1)        
+        
         self.copy_system_locks_var = tk.BooleanVar(value=True)
         tk.Checkbutton(content_frame, text=self.t['copy_system_locks'], 
                       variable=self.copy_system_locks_var).pack(anchor="w", pady=1)
+        
+        self.copy_page_locks_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(content_frame, text=self.t['copy_page_locks'],
+                       variable=self.copy_page_locks_var).pack(anchor="w", pady=1)            
         
         self.copy_pictures_var = tk.BooleanVar(value=True)
         tk.Checkbutton(content_frame, text=self.t['copy_pictures'], 
@@ -356,10 +366,10 @@ class ConcatenateGUI:
             else:
                 self.section_options_frame.pack_forget()
         
-        self.break_system_var.trace('w', on_system_break_change)
-        self.break_page_var.trace('w', on_page_break_change) 
-        self.break_section_var.trace('w', on_section_break_change)
-        
+        self.break_system_var.trace_add('write', on_system_break_change)
+        self.break_page_var.trace_add('write', on_page_break_change) 
+        self.break_section_var.trace_add('write', on_section_break_change)
+         
         tk.Checkbutton(break_type_frame, text=self.t['break_system'], 
                       variable=self.break_system_var).pack(side="left", padx=5)
         tk.Checkbutton(break_type_frame, text=self.t['break_page'], 
@@ -595,6 +605,28 @@ class ConcatenateGUI:
         """Restart the application"""
         self.root.destroy()
         os.execv(sys.executable, [sys.executable] + sys.argv)
+        
+    def _add_tooltip(self, widget, text):
+        """Simple tooltip for a Tk widget"""
+        def enter(event):
+            self.tooltip = tk.Toplevel(widget)
+            self.tooltip.wm_overrideredirect(True)
+            self.tooltip.wm_geometry(f"+{event.x_root + 10}+{event.y_root + 10}")
+            label = tk.Label(self.tooltip, text=text, 
+                            background="lightsteelblue", 
+                            relief="solid", borderwidth=1,
+                            font=("Arial", 8),
+                            justify="left",
+                            wraplength=200) 
+            label.pack()
+        
+        def leave(event):
+            if hasattr(self, 'tooltip'):
+                self.tooltip.destroy()
+                del self.tooltip
+        
+        widget.bind("<Enter>", enter)
+        widget.bind("<Leave>", leave)    
     
     # -------------------------------------------------------------------------
     # File handling
@@ -884,7 +916,9 @@ class ConcatenateGUI:
 
             copy_frames = self.copy_frames_var.get()
             copy_title_frames = self.copy_title_frames_var.get() if copy_frames else False
+            copy_fboxes = self.copy_fboxes_var.get()
             copy_system_locks = self.copy_system_locks_var.get()
+            copy_page_locks = self.copy_page_locks_var.get()
             copy_pictures = self.copy_pictures_var.get()  
             
             break_types = []
@@ -933,7 +967,9 @@ class ConcatenateGUI:
                     output, 
                     copy_frames=copy_frames,
                     copy_title_frames=copy_title_frames,
+                    copy_fboxes=copy_fboxes,
                     copy_system_locks=copy_system_locks,
+                    copy_page_locks=copy_page_locks,
                     copy_pictures=copy_pictures,
                     break_type=break_type,
                     break_options=break_options,

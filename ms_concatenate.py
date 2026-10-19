@@ -260,7 +260,7 @@ def _fuzzy_instrument_match(target_parts, source_parts, threshold=0.7, number_st
     
     
 def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=True, 
-                copy_system_locks=True, copy_pictures=False, verbose=False, 
+                copy_fboxes=False, copy_system_locks=True, copy_page_locks=True, copy_pictures=False, verbose=False, 
                 progress_callback=None, break_type="none", break_options=None,
                 log_level="INFO", log_file=None, skip_incompatible=True, 
                 console_output=False, overwrite_log=False,
@@ -274,7 +274,9 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
     logger.info(f"Source files: {[os.path.basename(f) for f in source_paths]}")
     logger.info(f"Target file: {os.path.basename(target_path)}")
     logger.info(f"Options - Copy frames: {copy_frames}, Copy title frames: {copy_title_frames}, "
-                f"Copy system locks: {copy_system_locks}, Copy pictures: {copy_pictures}")
+                f"Copy FBoxes: {copy_fboxes}, "
+                f"Copy system locks: {copy_system_locks}, Copy page locks: {copy_page_locks}, "
+                f"Copy pictures: {copy_pictures}")
     logger.info(f"Break type: {break_type}, Skip incompatible: {skip_incompatible}")
     logger.info(f"Fuzzy matching: {fuzzy_matching}, Threshold: {match_threshold}, Number strategy: {number_strategy}")
     
@@ -402,7 +404,9 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
             source, 
             copy_frames=copy_frames,
             copy_title_frames=copy_title_frames,
+            copy_fboxes=copy_fboxes,
             copy_system_locks=copy_system_locks,
+            copy_page_locks=copy_page_locks,
             copy_pictures=copy_pictures,
             target_path=target_path
         )
@@ -432,6 +436,47 @@ def concatenate(source_paths, target_path, copy_frames=True, copy_title_frames=T
         #logger.info("Excerpts removed successfully")
     else:
         logger.debug("No Excerpts found in final score")
+        
+        
+    # Ensure the internal .mscx file matches the .mscz filename
+    target_name = os.path.basename(target_path)
+    expected_mscx = os.path.splitext(target_name)[0] + ".mscx"
+    
+    try:
+        import zipfile
+        import tempfile
+        import shutil
+        
+        with zipfile.ZipFile(target_path, 'r') as zin:
+            # Check if the expected .mscx is already there
+            if expected_mscx not in zin.namelist():
+                logger.info(f"Renaming internal .mscx to match {target_name}...")
+                
+                # Find the existing .mscx file
+                old_mscx = next((name for name in zin.namelist() if name.endswith('.mscx')), None)
+                
+                if old_mscx:
+                    # Create a temp file for the updated zip
+                    temp_fd, temp_path = tempfile.mkstemp(suffix=".mscz")
+                    os.close(temp_fd)
+                    
+                    # Copy all files, renaming the .mscx
+                    with zipfile.ZipFile(temp_path, 'w', zipfile.ZIP_DEFLATED) as zout:
+                        for item in zin.infolist():
+                            data = zin.read(item.filename)
+                            if item.filename == old_mscx:
+                                # Rename this entry
+                                zout.writestr(expected_mscx, data)
+                            else:
+                                zout.writestr(item, data)
+                    
+                    # Replace the original file
+                    shutil.move(temp_path, target_path)
+                    logger.info(f"Internal .mscx renamed to {expected_mscx}")
+                    
+    except Exception as e:
+        logger.warning(f"Could not rename internal .mscx (non-critical): {e}")    
+        
         
     # Copy pictures if requested
     total_pictures_copied = 0
@@ -473,44 +518,55 @@ def _add_layout_break(score, break_type, break_options):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("Sources", type=str, nargs="+",
-                   help="MuseScore3 score file to copy measures from")
+                   help="MuseScore score file(s) to copy measures from")
     p.add_argument("Target", type=str, nargs=1,
-                   help="MuseScore3 score file to copy concatenated measures to")
+                   help="MuseScore score file to write the concatenated result to")
     p.add_argument("--no-copy-frames", action="store_true",
                    help="Do not copy frames from subsequent scores (only measures)")
     p.add_argument("--no-copy-title-frames", action="store_true",
                    help="Do not copy title frames from subsequent scores")
-    p.add_argument("--no-remove-excerpts", action="store_true",
-                   help="Do not remove Excerpts (linked parts) from the first file")               
+    p.add_argument("--copy-fboxes", action="store_true",
+                   help="Copy fretboard diagram frames (FBoxes) from subsequent scores")               
     p.add_argument("--no-copy-pictures", action="store_true",
-               help="Do not copy embedded pictures from subsequent scores")               
+                   help="Do not copy embedded pictures from subsequent scores")
     p.add_argument("--no-copy-system-locks", action="store_true",
                    help="Do not copy system locks from subsequent scores")
+    p.add_argument("--no-copy-page-locks", action="store_true",
+                   help="Do not copy page locks from subsequent scores")
+    p.add_argument("--skip-incompatible", action="store_true",
+                   help="Skip files with incompatible instrumentation instead of raising an error")
     p.add_argument("--fuzzy-matching", action="store_true",
                    help="Use fuzzy matching for instrument names (allows variations)")
     p.add_argument("--match-threshold", type=float, default=0.7,
-                   help="Minimum score for fuzzy matching (0.0-1.0, default: 0.7)")  
+                   help="Minimum score for fuzzy matching (0.0-1.0, default: 0.7)")
     p.add_argument("--number-strategy", choices=["ignore", "prefer", "match"], default="prefer",
-                   help="How to handle numbers in instrument names: ignore, prefer (default), or match")                                
+                   help="How to handle numbers in instrument names: ignore, prefer (default), or match")
     p.add_argument("--verbose", "-v", action="store_true",
                    help="Show more detailed debug information")
     p.epilog = __doc__
     options = p.parse_args()
 
     try:
-        success, duplicate_warnings = concatenate(
+        success, skipped_files = concatenate(
             options.Sources, 
             options.Target[0], 
             copy_frames=not options.no_copy_frames,
-            copy_pictures=not options.no_copy_pictures,
             copy_title_frames=not options.no_copy_title_frames,
+            copy_fboxes=options.copy_fboxes,
+            copy_pictures=not options.no_copy_pictures,
             copy_system_locks=not options.no_copy_system_locks,
-            remove_excerpts=not options.no_remove_excerpts, 
+            copy_page_locks=not options.no_copy_page_locks,
+            skip_incompatible=options.skip_incompatible,
+            fuzzy_matching=options.fuzzy_matching,
+            match_threshold=options.match_threshold,
+            number_strategy=options.number_strategy.upper(),
             verbose=options.verbose
         )
         
-        if duplicate_warnings and options.verbose:
-            print(f"Files with duplicate eids: {', '.join(duplicate_warnings)}")
+        if skipped_files and options.verbose:
+            print(f"Skipped {len(skipped_files)} file(s):")
+            for skipped in skipped_files:
+                print(f"  {skipped['file']}: {skipped['reason']}")
             
     except Exception as e:
         p.error(str(e))
